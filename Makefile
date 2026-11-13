@@ -56,13 +56,13 @@ docker-build: ## Construit les images Docker (backend + frontend)
 docker-up: ## Démarre les conteneurs en arrière-plan (selon DOCKER_PROFILES)
 	$(COMPOSE) --profile $(DOCKER_PROFILES) up -d
 	@echo "Services démarrés avec les profils : $(DOCKER_PROFILES)"
-	@if echo "$(DOCKER_PROFILES)" | grep -q "frontend"; then \
+	@if echo " $(DOCKER_PROFILES) " | grep -q " frontend "; then \
 		echo "Interface : http://localhost:$(FRONTEND_PORT)"; \
 	fi
-	@if echo "$(DOCKER_PROFILES)" | grep -q "backend"; then \
+	@if echo " $(DOCKER_PROFILES) " | grep -q " backend "; then \
 		echo "API : http://localhost:$(BACKEND_PORT)"; \
 	fi
-	@if echo "$(DOCKER_PROFILES)" | grep -q "dev"; then \
+	@if echo " $(DOCKER_PROFILES) " | grep -q " dev "; then \
 		echo "Vault : http://localhost:$(VAULT_PORT)"; \
 	fi
 
@@ -71,12 +71,13 @@ docker-down: ## Arrête et supprime les conteneurs (tous les profils)
 	$(COMPOSE) --profile dev --profile test --profile backend --profile frontend down --remove-orphans
 
 docker-logs: ## Suit les logs des conteneurs (Ctrl-C pour sortir)
-	$(COMPOSE) --profile $(DOCKER_PROFILES) logs -f
+	$(COMPOSE) --profile dev --profile test --profile backend --profile frontend logs -f
 
 docker-restart: docker-down docker-up ## Redémarre l'application conteneurisée
 
 docker-clean: ## Arrête les conteneurs et supprime les images locales
-	$(COMPOSE) down --rmi local
+	@echo "Nettoyage des conteneurs et images..."
+	$(COMPOSE) --profile dev --profile test --profile backend --profile frontend down --rmi local --remove-orphans
 
 kill-port: ## Libère un port occupé : make kill-port PORT=<numéro>
 	@if [ -z "$(PORT)" ]; then \
@@ -123,8 +124,9 @@ vault-up: ## Démarre Vault pour le développement (avec AppRole auto-configuré
 vault-init: vault-up wait-for-vault ## Démarre Vault et stocke les secrets
 
 vault-down: ## Arrête Vault
-	$(COMPOSE) --profile dev stop vault
-	$(COMPOSE) --profile dev rm -fsv vault
+	@echo "Arrêt de Vault..."
+	$(COMPOSE) --profile dev --profile test stop vault
+	$(COMPOSE) --profile dev --profile test rm -fsv vault
 
 vault-shell: ## Ouvre un shell admin dans le conteneur Vault (nécessite accès Docker)
 	@echo "⚠️  Accès admin - nécessite les droits Docker"
@@ -166,7 +168,8 @@ docker-test-up: ## Démarre Vault + backend pour les tests d'intégration
 	@echo "✅ Services prêts pour les tests"
 
 docker-test-down: ## Arrête les services de test
-	$(COMPOSE) --profile test down
+	@echo "Arrêt des services de test..."
+	$(COMPOSE) --profile test --profile backend down --remove-orphans
 
 test-integration: docker-test-up ## Exécute les tests d'intégration avec Vault
 	@echo "🧪 Exécution des tests d'intégration..."
