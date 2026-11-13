@@ -4,8 +4,10 @@
 # Orchestration Docker de l'application (backend + frontend + Vault).
 #
 # PROFILS DOCKER COMPOSE :
-#   - dev : active Vault local (docker compose --profile dev up)
-#   - Par défaut : backend + frontend uniquement (pour production)
+#   - dev : Vault local (docker compose --profile dev up)
+#   - test : Vault + backend pour les tests
+#   - backend : API backend
+#   - frontend : Interface utilisateur
 #
 # Les commandes npm de développement et de test restent utilisables
 # directement dans backend/ et frontend/ (voir README).
@@ -14,31 +16,29 @@
 FRONTEND_PORT ?= 3000
 BACKEND_PORT ?= 4000
 VAULT_PORT ?= 8200
-# Pour le conteneur backend, VAULT_ADDR doit pointer vers le service vault dans le réseau Docker
-# Pour les commandes make (ex. vault-shell), VAULT_ADDR doit être accessible depuis la machine hôte
 VAULT_ADDR_LOCAL ?= http://0.0.0.0:$(VAULT_PORT)
 VAULT_ADDR ?= http://vault:$(VAULT_PORT)
 VAULT_CONTAINER ?= sesame-vault-1
 COMPOSE = docker compose
-
-# --- Profils Docker Compose ---
-# Par défaut : active tous les profils (dev, backend, frontend)
-# En production : seul backend et frontend sont nécessaires
 DOCKER_PROFILES ?= dev backend frontend
 
 # --- Fonction réutilisable pour exécuter des commandes dans Vault ---
-# Usage: $(call VAULT_EXEC,cmd)
-# Exemple: $(call VAULT_EXEC,vault status)
 define VAULT_EXEC
 @docker exec $(VAULT_CONTAINER) sh -c 'export VAULT_ADDR=$(VAULT_ADDR_LOCAL); \
   export VAULT_TOKEN=$$(cat /vault/secrets/vault_root_token); $(1)'
+endef
+
+# --- Fonction réutilisable pour attendre que Vault soit prêt ---
+define WAIT_FOR_VAULT
+@echo "⏳ Attente que Vault soit complètement initialisé..."; \
+while ! docker exec $(VAULT_CONTAINER) test -f /vault/secrets/initialized 2>/dev/null; do sleep 1; done
 endef
 
 .DEFAULT_GOAL := help
 
 .PHONY: help docker docker-build docker-up docker-down docker-logs \
         docker-restart docker-clean kill-port \
-        vault-up vault-init vault-down vault-shell \
+        vault-up vault-init vault-down vault-shell wait-for-vault \
         dev-up prod-up full-up \
         test-integration test-backend test-all docker-test-up docker-test-down
 
@@ -46,7 +46,7 @@ help: ## Affiche cette aide
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | \
 	  awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
-# --- Démarrage standard (tous les services selon les profils) ---
+# --- Démarrage standard ---
 
 docker: docker-build docker-up ## Construit les images puis démarre les conteneurs
 
@@ -107,29 +107,8 @@ kill-port: ## Libère un port occupé : make kill-port PORT=<numéro>
 	fi; \
 	echo "Port $(PORT) libéré."
 
-# --- Convenience targets pour dev/prod ---
-
-# Démarrage en mode développement (Vault local + backend + frontend)
-.PHONY: dev-up
-dev-up: ## Démarre tous les services en mode développement (Vault + backend + frontend)
-	@echo "🚀 Démarrage en mode DEVELOPPEMENT (avec Vault local)..."
-	@$(COMPOSE) --profile dev --profile backend --profile frontend up -d
-	@echo "⏳ Attente que Vault soit complètement initialisé..."
-	@while ! docker exec $(VAULT_CONTAINER) test -f /vault/secrets/initialized 2>/dev/null; do sleep 1; done
-	@echo "✅ Tous les services démarrés :"
-	@echo "   Vault : http://localhost:$(VAULT_PORT)"
-	@echo "   API : http://localhost:$(BACKEND_PORT)"
-	@echo "   Interface : http://localhost:$(FRONTEND_PORT)"
-
-# Démarrage en mode production (backend + frontend uniquement, Vault externe)
-.PHONY: prod-up
-prod-up: ## Démarre backend + frontend pour production (Vault externe requis)
-	@echo "🚀 Démarrage en mode PRODUCTION (Vault externe requis)..."
-	@echo "   Assurez-vous que VAULT_ADDR pointe vers votre Vault externe."
-	@$(COMPOSE) --profile backend --profile frontend up -d
-	@echo "✅ Services production démarrés :"
-	@echo "   API : http://localhost:$(BACKEND_PORT)"
-	@echo "   Interface : http://localhost:$(FRONTEND_PORT)"
+wait-for-vault: ## Attend que Vault soit complètement initialisé
+	$(call WAIT_FOR_VAULT)
 
 # --- Vault ---
 
@@ -140,9 +119,7 @@ vault-up: ## Démarre Vault pour le développement (avec AppRole auto-configuré
 	@while ! $(COMPOSE) --profile dev ps vault | grep -q healthy; do sleep 1; done
 	@echo "✅ Vault et AppRole initialisés"
 
-vault-init: vault-up ## Démarre Vault et stocke les secrets (PASSWORD_SECRET_KEY + ADMIN_TOKEN) via AppRole
-	@echo "⏳ Attente que Vault soit complètement initialisé..."
-	@while ! docker exec $(VAULT_CONTAINER) test -f /vault/secrets/initialized 2>/dev/null; do sleep 1; done
+vault-init: vault-up wait-for-vault ## Démarre Vault et stocke les secrets
 
 vault-down: ## Arrête Vault
 	$(COMPOSE) --profile dev stop vault
@@ -153,12 +130,30 @@ vault-shell: ## Ouvre un shell admin dans le conteneur Vault (nécessite accès 
 	@docker exec -it $(VAULT_CONTAINER) sh -c 'export VAULT_ADDR=$(VAULT_ADDR_LOCAL); \
 		export VAULT_TOKEN=$$(cat /vault/secrets/vault_root_token); sh'
 
-# full-up : utilise dev-up qui active tous les profils
-full-up: vault-init dev-up ## Démarre Vault + stocke le secret + backend + frontend (tout-en-un)
+# --- Convenience targets pour dev/prod ---
+
+dev-up: ## Démarre tous les services en mode développement (Vault + backend + frontend)
+	@echo "🚀 Démarrage en mode DEVELOPPEMENT (avec Vault local)..."
+	@$(COMPOSE) --profile dev --profile backend --profile frontend up -d
+	$(call WAIT_FOR_VAULT)
+	@echo "✅ Tous les services démarrés :"
+	@echo "   Vault : http://localhost:$(VAULT_PORT)"
+	@echo "   API : http://localhost:$(BACKEND_PORT)"
+	@echo "   Interface : http://localhost:$(FRONTEND_PORT)"
+
+prod-up: ## Démarre backend + frontend pour production (Vault externe requis)
+	@echo "🚀 Démarrage en mode PRODUCTION (Vault externe requis)..."
+	@echo "   Assurez-vous que VAULT_ADDR pointe vers votre Vault externe."
+	@$(COMPOSE) --profile backend --profile frontend up -d
+	@echo "✅ Services production démarrés :"
+	@echo "   API : http://localhost:$(BACKEND_PORT)"
+	@echo "   Interface : http://localhost:$(FRONTEND_PORT)"
+
+# full-up : démarre Vault + backend + frontend (tout-en-un)
+full-up: vault-init dev-up ## Démarre Vault + stocke les secrets + backend + frontend
 
 # --- Tests ---
 
-# Démarre les services nécessaires pour les tests d'intégration
 docker-test-up: ## Démarre Vault + backend pour les tests d'intégration
 	@echo "🧪 Démarrage des services pour les tests d'intégration..."
 	@$(COMPOSE) --profile test --profile backend up -d vault
@@ -166,19 +161,15 @@ docker-test-up: ## Démarre Vault + backend pour les tests d'intégration
 	@while ! $(COMPOSE) --profile test ps vault | grep -q healthy; do sleep 1; done
 	@echo "✅ Services prêts pour les tests"
 
-# Arrête les services de test
 docker-test-down: ## Arrête les services de test
 	$(COMPOSE) --profile test down
 
-# Exécute les tests d'intégration (nécessite Vault + backend)
 test-integration: docker-test-up ## Exécute les tests d'intégration avec Vault
 	@echo "🧪 Exécution des tests d'intégration..."
 	@cd backend && docker exec -it sesame-test npm run test:integration
 
-# Exécute les tests backend (unitaires)
 test-backend: ## Exécute les tests unitaires du backend
 	@echo "🧪 Exécution des tests unitaires..."
 	cd backend && npm test
 
-# Exécute tous les tests (unitaires + intégration)
 test-all: test-backend test-integration ## Exécute tous les tests (unitaires + intégration)
