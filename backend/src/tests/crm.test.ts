@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { searchCrm, CrmError } from './crm.js';
+import { searchCrm, CrmError } from '../services/crm.js';
 
 type Captured = { url: string; init?: RequestInit };
 

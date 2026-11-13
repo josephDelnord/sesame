@@ -10,29 +10,33 @@ code client.
 sesame/
 ├── Makefile                 # Orchestration Docker (make docker, kill-port…)
 ├── docker-compose.yml       # Services sesame-backend et sesame-frontend
+├── .dockerignore            # Exclusions communes aux builds (contexte racine)
+├── docker/                  # Configuration Docker centralisée
+│   ├── backend/Dockerfile   # Build multi-étapes (tsc → runtime minimal)
+│   └── frontend/
+│       ├── Dockerfile       # Build multi-étapes (Vite → nginx)
+│       └── nginx.conf       # Sert le build et proxifie /api vers le backend
 ├── backend/                 # VM 1 — API "CRM" (Node.js + Express + TypeScript)
-│   ├── Dockerfile           # Build multi-étapes (tsc → runtime minimal)
 │   ├── .env.example         # Configuration documentée (copier en .env)
 │   ├── data/db.json         # Base JSON (montée depuis l'hôte en Docker)
 │   └── src/
-│       ├── index.ts         # Serveur HTTP + routes (dont régénération admin)
-│       ├── password.ts      # Formule de génération (hash recalculable versionné)
-│       ├── password.test.ts # Tests de la formule et des versions
-│       ├── db.ts            # Base de données (stockage JSON, upsert CRM)
-│       ├── crm.ts           # Connecteur HTTP vers le CRM de l'entreprise
-│       ├── crm.test.ts      # Tests du connecteur
-│       └── seed.ts          # Données d'exemple
+│       ├── index.ts         # Point d'entrée : serveur Express + montage des routes
+│       ├── routes/          # Un routeur par domaine (records, resolve, regenerate)
+│       ├── middleware/      # Authentification administrateur
+│       ├── services/        # password (formule), db, crm, seed
+│       ├── tests/           # Tests de la formule, des versions et du CRM
+│       └── utils/           # Aides partageables (lecture de champs)
 └── frontend/                # VM 2 — Interface utilisateur (React + TypeScript + Vite)
-    ├── Dockerfile           # Build multi-étapes (Vite → nginx)
-    ├── nginx.conf           # Sert le build et proxifie /api vers le backend
-    ├── .env.example         # VITE_API_URL (vide = même origine)
     ├── index.html           # Polices + application du thème avant rendu
+    ├── .env.example         # VITE_API_URL (vide = même origine)
     └── src/
-        ├── App.tsx          # En-tête, bascule de thème clair/sombre, pied de page
-        ├── api.ts           # Client HTTP typé (resolve, regenerate)
-        ├── styles.css       # Thème sombre (par défaut) et clair en variables CSS
-        └── components/
-            └── PasswordForm.tsx
+        ├── App.tsx          # En-tête, assemblage des composants, pied de page
+        ├── main.tsx         # Point d'entrée React
+        ├── services/api.ts  # Client HTTP typé (resolve, regenerate)
+        ├── components/
+        │   ├── PasswordForm.tsx
+        │   └── ThemeToggle.tsx  # Bascule clair/sombre + mémorisation
+        └── styles/global.css    # Thème sombre (défaut) et clair en variables CSS
 ```
 
 ## Principe
@@ -94,7 +98,7 @@ affiché, avec saisie du code administrateur.
 Si l'enregistrement n'est pas trouvé dans la base locale, le backend peut
 aller chercher les informations (`serialNumber`, `clientCode`, `ip`) dans le
 CRM de l'entreprise, via un connecteur HTTP configurable
-(`backend/src/crm.ts`). L'équipement trouvé est importé dans la base locale
+(`backend/src/services/crm.ts`). L'équipement trouvé est importé dans la base locale
 (sans doublon) avant recalcul du mot de passe.
 
 Flux de `/api/resolve` :

@@ -3,7 +3,9 @@ name: sesame
 services:
   # VM 1 — API "CRM" : génération et recalcul des mots de passe
   backend:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile
     container_name: sesame-backend
     ports:
       - "${BACKEND_PORT:-4000}:4000"
@@ -22,7 +24,8 @@ services:
   # VM 2 — Interface React compilée, servie par nginx (proxifie /api -> backend)
   frontend:
     build:
-      context: ./frontend
+      context: .
+      dockerfile: docker/frontend/Dockerfile
       args:
         # Laisser vide pour la même origine ; ex. http://serveur:4000 sinon.
         - VITE_API_URL=

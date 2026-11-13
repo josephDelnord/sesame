@@ -1,0 +1,18 @@
+# Contexte de build Docker : racine du dépôt (voir docker-compose.yml).
+# Exclusions communes aux images backend et frontend.
+
+.git
+Makefile
+README.md
+docker-compose.yml
+
+# Dépendances et artefacts
+**/node_modules
+**/dist
+**/*.log
+**/*.tsbuildinfo
+
+# Configuration locale et données : jamais dans les images
+**/.env
+**/.env.example
+backend/data

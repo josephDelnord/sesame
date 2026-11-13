@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { generatePassword, meetsCriteria, PASSWORD_MIN_LENGTH } from './password.js';
+import { generatePassword, meetsCriteria, PASSWORD_MIN_LENGTH } from '../services/password.js';
 
 test('le mot de passe est déterministe (recalculable)', () => {
   assert.equal(

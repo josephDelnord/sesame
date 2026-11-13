@@ -1,5 +1,5 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react';
-import { resolvePassword, regeneratePassword, type RouterRecord } from '../api';
+import { resolvePassword, regeneratePassword, type RouterRecord } from '../services/api';
 
 interface FieldState {
   serialNumber: string;
