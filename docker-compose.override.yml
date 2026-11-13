@@ -1,15 +1,19 @@
 # docker-compose.override.yml
 # Configuration Vault pour l'environnement de développement
-# Ce fichier est automatiquement chargé par docker compose up/down
+# Utilise AppRole pour l'authentification (plus sécurisé que le token root)
 
 services:
   backend:
     environment:
       VAULT_ADDR: http://vault:8200
-      VAULT_TOKEN: root
+      VAULT_ROLE_ID_FILE: /run/secrets/vault_role_id
+      VAULT_SECRET_ID_FILE: /run/secrets/vault_secret_id
     depends_on:
       vault:
         condition: service_healthy
+    secrets:
+      - vault_role_id
+      - vault_secret_id
 
   vault:
     image: hashicorp/vault:1.16
@@ -27,6 +31,14 @@ services:
       start_period: 10s
     volumes:
       - vault_dev_data:/vault/file
+      - ./docker/vault:/docker-entrypoint-init.d:ro
+    entrypoint: /docker-entrypoint-init.d/entrypoint.sh
+
+secrets:
+  vault_role_id:
+    file: ./docker/vault/secrets/vault_role_id
+  vault_secret_id:
+    file: ./docker/vault/secrets/vault_secret_id
 
 volumes:
   vault_dev_data:

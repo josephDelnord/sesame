@@ -2,38 +2,84 @@
  * Module d'intégration avec HashiCorp Vault pour la récupération
  * du sel statique PASSWORD_SECRET_KEY.
  * 
- * Priorité :
- * 1. Vault (si VAULT_ADDR est défini)
- * 2. Variable d'environnement PASSWORD_SECRET_KEY (fallback dev)
- * 
- * En production, seul Vault doit être utilisé.
+ * Utilise AppRole pour l'authentification (plus sécurisé que le token root).
+ * En développement, les Role ID et Secret ID sont montés via Docker secrets.
  */
 
 import NodeVault from 'node-vault';
+import { readFileSync } from 'fs';
 
 // Type pour le client Vault
 interface VaultClient {
   read(path: string): Promise<{ data?: { data?: Record<string, unknown> } }>;
+  approleLogin(params: { role_id: string; secret_id: string }): Promise<void>;
 }
 
 // Singleton pour le client Vault
 let vaultClient: VaultClient | null = null;
 
 /**
- * Crée ou retourne le client Vault singleton.
- * Retourne null si Vault n'est pas configuré (VAULT_ADDR absent).
+ * Récupère le Role ID depuis un fichier ou une variable d'environnement.
  */
-function getVaultClient(): VaultClient | null {
+function getRoleId(): string | null {
+  // Essayer de lire depuis le fichier monté par Docker
+  try {
+    const roleIdPath = process.env.VAULT_ROLE_ID_FILE || '/run/secrets/vault_role_id';
+    return readFileSync(roleIdPath, 'utf8').trim();
+  } catch {
+    // Retourner null si le fichier n'existe pas
+    return null;
+  }
+}
+
+/**
+ * Récupère le Secret ID depuis un fichier ou une variable d'environnement.
+ */
+function getSecretId(): string | null {
+  try {
+    const secretIdPath = process.env.VAULT_SECRET_ID_FILE || '/run/secrets/vault_secret_id';
+    return readFileSync(secretIdPath, 'utf8').trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Crée ou retourne le client Vault singleton.
+ * Utilise AppRole pour l'authentification.
+ * Retourne null si Vault n'est pas configuré.
+ */
+async function getVaultClient(): Promise<VaultClient | null> {
   if (!process.env.VAULT_ADDR) {
     return null;
   }
 
   if (!vaultClient) {
-    vaultClient = NodeVault({
+    const client = NodeVault({
       endpoint: process.env.VAULT_ADDR,
-      token: process.env.VAULT_TOKEN,
-      apiVersion: 'v2', // Utilise KV v2 par défaut
+      apiVersion: 'v2',
     });
+    
+    // Authentification avec AppRole si les fichiers sont disponibles
+    const roleId = getRoleId();
+    const secretId = getSecretId();
+    
+    if (roleId && secretId) {
+      try {
+        await client.approleLogin({ role_id: roleId, secret_id: secretId });
+        vaultClient = client;
+      } catch (error) {
+        console.error('Erreur lors de l\'authentification AppRole:', error);
+        return null;
+      }
+    } else if (process.env.VAULT_TOKEN) {
+      // Fallback sur le token direct (pour le dev sans AppRole)
+      client.token = process.env.VAULT_TOKEN;
+      vaultClient = client as VaultClient;
+    } else {
+      console.error('AppRole ou VAULT_TOKEN non configuré');
+      return null;
+    }
   }
   return vaultClient;
 }
@@ -41,16 +87,18 @@ function getVaultClient(): VaultClient | null {
 /**
  * Récupère le PASSWORD_SECRET_KEY depuis Vault.
  * Vault est OBLIGATOIRE. Il n'y a plus de fallback sur .env.
+ * Utilise AppRole pour l'authentification.
  * 
  * @throws Error si Vault n'est pas configuré ou si le secret est introuvable
  */
 export async function getPasswordSecretKey(): Promise<string> {
-  const vault = getVaultClient();
+  const vault = await getVaultClient();
 
   if (!vault) {
     throw new Error(
-      'Vault est OBLIGATOIRE. Configurez VAULT_ADDR et VAULT_TOKEN dans .env ' +
-      'pour utiliser Vault (ex: VAULT_ADDR=http://vault:8200 VAULT_TOKEN=root).'
+      'Vault est OBLIGATOIRE. Configurez VAULT_ADDR et soit : ' +
+      '(1) VAULT_ROLE_ID_FILE + VAULT_SECRET_ID_FILE pour AppRole, ' +
+      '(2) VAULT_TOKEN pour l\'authentification directe.'
     );
   }
 
