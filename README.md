@@ -190,6 +190,104 @@ défaut) et un mode clair, basculables via le bouton soleil/lune de
 l'en-tête. Le choix est mémorisé dans le navigateur (`localStorage`) et
 le thème initial suit la préférence du système (`prefers-color-scheme`).
 
+## HashiCorp Vault (stockage sécurisé des secrets)
+
+Sésame utilise **HashiCorp Vault** en environnement de développement pour
+stocker le `PASSWORD_SECRET_KEY` de manière sécurisée. Vault est **obligatoire**
+et remplace le stockage du secret dans les fichiers de configuration.
+
+### Architecture
+
+- **Vault** (`http://localhost:8200`) : stocke le `PASSWORD_SECRET_KEY`
+- **AppRole** : authentification sécurisée du backend (Role ID + Secret ID)
+- **KV v2** : le secret est stocké en Key-Value version 2 à
+  `secret/data/data/sesame`
+
+### Prérequis
+
+- Docker et Docker Compose installés
+- Port `8200` disponible sur `localhost`
+
+### Démarrage complet avec Vault
+
+```bash
+# Démarre Vault + initialise AppRole + stocke le secret + backend + frontend
+make full-up
+
+# Ou étape par étape
+make vault-up      # Démarre Vault
+make vault-secrets # Génère et stocke le PASSWORD_SECRET_KEY
+make docker-up     # Démarre backend + frontend
+```
+
+### Commandes Vault disponibles
+
+| Commande | Description | Accès |
+|----------|-------------|-------|
+| `make vault-up` | Démarre Vault et initialise AppRole | ✅ Public |
+| `make vault-down` | Arrête Vault | ✅ Public |
+| `make vault-init` | `vault-up` + `vault-secrets` | ✅ Public |
+| `make vault-secrets` | Régénère le PASSWORD_SECRET_KEY | ✅ Public |
+| `make full-up` | Démarre tout en une commande | ✅ Public |
+| `make vault-shell` | **Shell admin** dans le conteneur Vault | 🔒 Nécessite accès Docker |
+
+### Accès à l'interface web de Vault
+
+1. **URL** : `http://localhost:8200`
+2. **Token root** : généré aléatoirement à chaque démarrage
+   - Récupérez-le avec :
+     ```bash
+     docker exec sesame-vault-1 cat /vault/secrets/vault_root_token
+     ```
+
+### Accès admin via shell
+
+```bash
+make vault-shell
+```
+
+Cette commande ouvre un shell dans le conteneur Vault avec :
+- `VAULT_ADDR=http://0.0.0.0:8200`
+- `VAULT_TOKEN` configuré avec le token root
+
+Exemples dans le shell :
+```bash
+# Lister les secrets KV v2
+vault kv list secret/data/
+
+# Récupérer le PASSWORD_SECRET_KEY
+vault kv get secret/data/sesame
+
+# Vérifier l'état de Vault
+vault status
+```
+
+> ⚠️ **Sécurité** :
+> - Le token root **n'est jamais affiché** dans le terminal par les commandes Makefile
+> - L'accès via `make vault-shell` nécessite un **accès Docker** sur la machine
+> - Le backend utilise **AppRole** (pas le token root) pour accéder aux secrets
+> - En production : désactivez le token root et utilisez uniquement AppRole
+
+### Configuration pour la production
+
+En production, configurez Vault avec :
+- **AppRole uniquement** (pas de token root)
+- **Montage du volume** pour les fichiers Role ID/Secret ID
+- **Réseau sécurisé** (HTTPS, pas d'exposition publique de Vault)
+
+Exemple de configuration backend (.env) :
+```
+VAULT_ADDR=https://vault.prod.internal:8200
+VAULT_ROLE_ID_FILE=/run/secrets/vault_role_id
+VAULT_SECRET_ID_FILE=/run/secrets/vault_secret_id
+```
+
+### Intégration continue (CI)
+
+Pour les tests CI sans Vault :
+- Utilisez `backend/src/tests/password.test.ts` qui contourne Vault
+- Ou configurez un Vault éphémère dans votre pipeline
+
 ## Tests
 
 ```bash
