@@ -1,16 +1,18 @@
-# Biba — Gestion sécurisée de mots de passe clients
+# Sésame — Gestion sécurisée de mots de passe clients
 
-Application full-stack de génération et recalcul de mots de passe clients à partir
-du numéro de série (SN) d'un routeur et d'un code client.
+« Sésame, ouvre-toi » : application full-stack de génération et recalcul de
+mots de passe clients à partir du numéro de série (SN) d'un routeur et d'un
+code client.
 
 ## Architecture
 
 ```
-biba/
+sesame/
 ├── backend/                 # VM 1 — API "CRM" (Node.js + Express + TypeScript)
 │   └── src/
 │       ├── index.ts         # Serveur HTTP + routes
 │       ├── password.ts      # Formule de génération (hash recalculable)
+│       ├── password.test.ts # Tests de la formule
 │       ├── db.ts            # Base de données (stockage JSON)
 │       └── seed.ts          # Données d'exemple
 └── frontend/                # VM 2 — Interface utilisateur (React + TypeScript + Vite)
@@ -21,7 +23,7 @@ biba/
 
 ## Principe
 
-Le mot de passe est deterministe et recalculable :
+Le mot de passe est déterministe et recalculable :
 
 `password = FORMULE( SHA-256( SN :: code_client ) )`
 
@@ -77,6 +79,15 @@ Pour une autre machine : adapter `VITE_API_URL` dans `frontend/.env`.
 2. Valider : les champs manquants sont complétés depuis la base.
 3. Le mot de passe recalculé s'affiche, avec options **copier**,
    **masquer** et **afficher**.
+
+## Tests
+
+```bash
+cd backend && npm test
+```
+
+Vérifie le déterminisme du mot de passe, le respect des critères et
+l'unicité par SN / code client.
 
 ## Notes
 

@@ -1,8 +1,8 @@
 {
-  "name": "biba-frontend",
+  "name": "sesame-frontend",
   "version": "1.0.0",
   "private": true,
-  "description": "Frontend : recalcul de mots de passe clients à partir de données partielles",
+  "description": "Frontend de Sésame : recalcul de mots de passe clients à partir de données partielles",
   "type": "module",
   "scripts": {
     "dev": "vite",

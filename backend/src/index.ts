@@ -100,5 +100,5 @@ app.post('/api/resolve', (req: Request, res: Response) => {
 app.listen(PORT, () => {
   initDb();
   seedIfEmpty();
-  console.log(`Backend Biba en écoute sur http://localhost:${PORT}`);
+  console.log(`Backend Sésame en écoute sur http://localhost:${PORT}`);
 });

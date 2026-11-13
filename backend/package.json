@@ -1,8 +1,8 @@
 {
-  "name": "biba-backend",
+  "name": "sesame-backend",
   "version": "1.0.0",
   "private": true,
-  "description": "Backend CRM : génération et recalcul de mots de passe clients",
+  "description": "Backend CRM de Sésame : génération et recalcul de mots de passe clients",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
