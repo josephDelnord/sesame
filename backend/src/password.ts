@@ -26,14 +26,21 @@ function sha256(input: string): Buffer {
  *
  * Critères garantis : longueur PASSWORD_LENGTH (>= 8), au moins une majuscule,
  * une minuscule, un chiffre et un caractère spécial.
+ *
+ * `version` permet la rotation (régénération admin) : la version 0 est la
+ * formule d'origine (compatibilité assurée avec les mots de passe existants),
+ * chaque version ultérieure produit un mot de passe différent mais tout
+ * aussi déterministe et recalculable.
  */
 export function generatePassword(
   serialNumber: string,
   clientCode: string,
   length = PASSWORD_LENGTH,
+  version = 0,
 ): string {
   const len = Math.max(PASSWORD_MIN_LENGTH, length);
-  const hash = sha256(`${serialNumber}::${clientCode}`);
+  const versionSuffix = version > 0 ? `::v${version}` : '';
+  const hash = sha256(`${serialNumber}::${clientCode}${versionSuffix}`);
 
   // Quatre positions de classe garantie (au moins 8 caractères demandés).
   const chars: string[] = [
@@ -48,7 +55,7 @@ export function generatePassword(
 
   // Mélange déterministe (Fisher-Yates piloté par un second hash) pour que les
   // classes garanties ne soient pas toujours aux quatre premières positions.
-  const order = sha256(`order:${serialNumber}::${clientCode}`);
+  const order = sha256(`order:${serialNumber}::${clientCode}${versionSuffix}`);
   for (let i = chars.length - 1; i > 0; i--) {
     const j = order[i % order.length] % (i + 1);
     [chars[i], chars[j]] = [chars[j], chars[i]];

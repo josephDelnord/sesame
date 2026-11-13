@@ -1,8 +1,18 @@
 import express, { type Request, type Response } from 'express';
 import cors from 'cors';
-import { initDb, listRecords, findRecord, createRecord, passwordOf } from './db.js';
+import {
+  initDb,
+  listRecords,
+  findRecord,
+  createRecord,
+  upsertRecord,
+  getRecordById,
+  regeneratePassword,
+  passwordOf,
+} from './db.js';
 import { seedIfEmpty } from './seed.js';
 import { generatePassword, meetsCriteria, PASSWORD_LENGTH } from './password.js';
+import { searchCrm, CrmError } from './crm.js';
 
 const app = express();
 const PORT = Number(process.env.PORT ?? 4000);
@@ -62,7 +72,7 @@ app.post('/api/records', (req: Request, res: Response) => {
  * Recalcul du mot de passe à partir de données partielles.
  * Les champs manquants sont complétés depuis la base avant recalcul.
  */
-app.post('/api/resolve', (req: Request, res: Response) => {
+app.post('/api/resolve', async (req: Request, res: Response) => {
   const partial = {
     serialNumber: readString(req.body?.serialNumber),
     clientCode: readString(req.body?.clientCode),
@@ -86,6 +96,24 @@ app.post('/api/resolve', (req: Request, res: Response) => {
     return;
   }
 
+  // Base locale infructueuse : interrogation du CRM de l'entreprise
+  // (connecteur désactivé si CRM_API_URL n'est pas défini).
+  if (!record) {
+    try {
+      const crmRecord = await searchCrm(partial);
+      if (crmRecord) {
+        record = upsertRecord(crmRecord).record;
+      }
+    } catch (err) {
+      const error =
+        err instanceof CrmError
+          ? err.message
+          : 'Erreur lors de la consultation du CRM.';
+      res.status(502).json({ error });
+      return;
+    }
+  }
+
   if (!record) {
     res.status(404).json({
       error: 'Aucun enregistrement trouvé avec les informations fournies.',
@@ -94,6 +122,57 @@ app.post('/api/resolve', (req: Request, res: Response) => {
   }
 
   const password = passwordOf(record);
+  res.json({ record, password });
+});
+
+/** Vérifie l'authentification administrateur (header Authorization: Bearer). */
+function isAdmin(req: Request): boolean {
+  const expected = process.env.ADMIN_TOKEN?.trim();
+  if (!expected) return false;
+  const header = req.headers.authorization ?? '';
+  if (!header.startsWith('Bearer ')) return false;
+  const token = header.slice(7).trim();
+  return token.length > 0 && token === expected;
+}
+
+/**
+ * Régénération du mot de passe d'un enregistrement (action administrateur) :
+ * incrémente la version du mot de passe, ce qui en calcule un nouveau,
+ * différent du précédent mais tout aussi recalculable.
+ */
+app.post('/api/records/:id/regenerate', async (req: Request, res: Response) => {
+  if (!process.env.ADMIN_TOKEN?.trim()) {
+    res.status(503).json({
+      error: 'Régénération désactivée : configurez ADMIN_TOKEN côté serveur.',
+    });
+    return;
+  }
+  if (!isAdmin(req)) {
+    res.status(401).json({ error: 'Code administrateur invalide.' });
+    return;
+  }
+
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1) {
+    res.status(400).json({ error: 'Identifiant invalide.' });
+    return;
+  }
+
+  if (!getRecordById(id)) {
+    res.status(404).json({ error: 'Aucun enregistrement avec cet identifiant.' });
+    return;
+  }
+
+  const record = regeneratePassword(id);
+  if (!record) {
+    res.status(500).json({ error: 'Échec de la régénération.' });
+    return;
+  }
+
+  const password = passwordOf(record);
+  console.log(
+    `[admin] Régénération de ${record.serialNumber}/${record.clientCode} -> version ${record.passwordVersion}`,
+  );
   res.json({ record, password });
 });
 

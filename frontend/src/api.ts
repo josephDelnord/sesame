@@ -4,6 +4,7 @@ export interface RouterRecord {
   clientCode: string;
   ip: string;
   createdAt: string;
+  passwordVersion: number;
 }
 
 export interface ResolveResponse {
@@ -30,6 +31,30 @@ export async function resolvePassword(partial: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(partial),
+  });
+  const data = (await res.json()) as ResolveResponse | ApiError;
+  if (!res.ok || 'error' in data) {
+    throw new Error((data as ApiError).error ?? 'Erreur inconnue.');
+  }
+  return data;
+}
+
+/**
+ * Demande la régénération du mot de passe d'un enregistrement (action
+ * administrateur) : POST /api/records/:id/regenerate avec le code admin
+ * en en-tête Authorization. Le backend incrémente la version du mot de
+ * passe et renvoie l'enregistrement mis à jour avec le nouveau mot de passe.
+ */
+export async function regeneratePassword(
+  recordId: number,
+  adminToken: string,
+): Promise<ResolveResponse> {
+  const res = await fetch(`${API_URL}/api/records/${recordId}/regenerate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${adminToken}`,
+    },
   });
   const data = (await res.json()) as ResolveResponse | ApiError;
   if (!res.ok || 'error' in data) {

@@ -1,5 +1,5 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react';
-import { resolvePassword } from '../api';
+import { resolvePassword, regeneratePassword, type RouterRecord } from '../api';
 
 interface FieldState {
   serialNumber: string;
@@ -11,15 +11,20 @@ const EMPTY_FORM: FieldState = { serialNumber: '', clientCode: '', ip: '' };
 
 export default function PasswordForm() {
   const [fields, setFields] = useState<FieldState>(EMPTY_FORM);
+  const [record, setRecord] = useState<RouterRecord | null>(null);
   const [password, setPassword] = useState<string | null>(null);
   const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [adminToken, setAdminToken] = useState('');
+  const [regenLoading, setRegenLoading] = useState(false);
 
   const setField = (name: keyof FieldState) => (e: ChangeEvent<HTMLInputElement>) => {
     setFields((prev) => ({ ...prev, [name]: e.target.value }));
     setPassword(null);
+    setRecord(null);
     setError(null);
   };
 
@@ -27,7 +32,9 @@ export default function PasswordForm() {
     e.preventDefault();
     setError(null);
     setPassword(null);
+    setRecord(null);
     setCopied(false);
+    setShowAdmin(false);
 
     if (!fields.serialNumber && !fields.clientCode && !fields.ip) {
       setError('Renseignez au moins un champ avant de valider.');
@@ -36,18 +43,19 @@ export default function PasswordForm() {
 
     setLoading(true);
     try {
-      const { record, password: result } = await resolvePassword({
+      const result = await resolvePassword({
         serialNumber: fields.serialNumber || undefined,
         clientCode: fields.clientCode || undefined,
         ip: fields.ip || undefined,
       });
       // Complétion automatique des champs manquants depuis la base.
       setFields({
-        serialNumber: record.serialNumber,
-        clientCode: record.clientCode,
-        ip: record.ip,
+        serialNumber: result.record.serialNumber,
+        clientCode: result.record.clientCode,
+        ip: result.record.ip,
       });
-      setPassword(result);
+      setRecord(result.record);
+      setPassword(result.password);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur inattendue.');
     } finally {
@@ -67,6 +75,29 @@ export default function PasswordForm() {
   };
 
   const masked = '•'.repeat(12);
+
+  /** Régénération administrateur : version +1 -> nouveau mot de passe. */
+  const handleRegenerate = async () => {
+    if (!record || !adminToken.trim()) {
+      setError('Saisissez le code administrateur.');
+      return;
+    }
+    setRegenLoading(true);
+    setError(null);
+    setCopied(false);
+    try {
+      const result = await regeneratePassword(record.id, adminToken.trim());
+      setRecord(result.record);
+      setPassword(result.password);
+      setVisible(true);
+      setShowAdmin(false);
+      setAdminToken('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur inattendue.');
+    } finally {
+      setRegenLoading(false);
+    }
+  };
 
   return (
     <div className="card">
@@ -108,9 +139,12 @@ export default function PasswordForm() {
 
       {error && <p className="message error" role="alert">{error}</p>}
 
-      {password && (
+      {password && record && (
         <div className="result">
-          <h2>Mot de passe recalculé</h2>
+          <h2>
+            Mot de passe recalculé
+            {record.passwordVersion > 0 && ` — version ${record.passwordVersion}`}
+          </h2>
           <div className="password-row">
             <output className="password" aria-label="Mot de passe recalculé">
               {visible ? password : masked}
@@ -123,6 +157,46 @@ export default function PasswordForm() {
                 {copied ? 'Copié !' : 'Copier'}
               </button>
             </div>
+          </div>
+
+          <div className="regen">
+            {showAdmin ? (
+              <>
+                <label className="field">
+                  <span>Code administrateur</span>
+                  <input
+                    type="password"
+                    value={adminToken}
+                    onChange={(e) => setAdminToken(e.target.value)}
+                    placeholder="Code admin"
+                    autoComplete="off"
+                  />
+                </label>
+                <div className="actions">
+                  <button type="button" onClick={handleRegenerate} disabled={regenLoading}>
+                    {regenLoading ? 'Régénération…' : 'Confirmer la régénération'}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => {
+                      setShowAdmin(false);
+                      setAdminToken('');
+                    }}
+                  >
+                    Annuler
+                  </button>
+                </div>
+                <p className="hint">
+                  Un nouveau mot de passe sera calculé (version +1) ; l'ancien
+                  ne sera plus valide côté routage.
+                </p>
+              </>
+            ) : (
+              <button type="button" className="secondary" onClick={() => setShowAdmin(true)}>
+                Régénérer (admin)
+              </button>
+            )}
           </div>
         </div>
       )}

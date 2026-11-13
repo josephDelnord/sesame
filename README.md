@@ -43,10 +43,68 @@ Le mot de passe est déterministe et recalculable :
 | GET     | /api/records    | Liste des enregistrements                                |
 | POST    | /api/records    | Création d'un enregistrement (SN, code client, IP)      |
 | POST    | /api/resolve    | Résout les champs manquants et recalcule le mot de passe |
+| POST    | /api/records/:id/regenerate | Régénération admin : calcule un nouveau mot de passe |
 
 `POST /api/resolve` accepte n'importe quelle combinaison partielle de
 `{ serialNumber, clientCode, ip }` : la base est interrogée pour retrouver
 l'enregistrement complet, puis le mot de passe est recalculé.
+
+## Régénération d'un mot de passe (admin)
+
+Le mot de passe est déterministe ; recalculer donne donc toujours le même
+résultat. Pour permettre à un administrateur de générer **un autre** mot de
+passe (compromission, rotation périodique…), chaque enregistrement porte un
+numéro de version (`passwordVersion`, 0 = formule d'origine compatible avec
+les mots de passe existants) :
+
+```
+password = FORMULE( SHA-256( SN :: code_client [:: v<version>] ) )
+```
+
+`POST /api/records/:id/regenerate` (en-tête `Authorization: Bearer
+<ADMIN_TOKEN>`) incrémente la version stockée : le mot de passe suivant est
+différent, mais reste recalculable à partir du même couple (SN, code client)
+et de la version courante. Les réponses d'erreur :
+
+- `503` : `ADMIN_TOKEN` non configuré côté serveur (fonctionnalité désactivée) ;
+- `401` : code administrateur invalide ;
+- `404` : identifiant inconnu.
+
+La variable `ADMIN_TOKEN` est définie dans `backend/.env` (non versionné). Le
+frontend affiche un bouton « Régénérer (admin) » dès qu'un mot de passe est
+affiché, avec saisie du code administrateur.
+
+## Connecteur CRM de l'entreprise
+
+Si l'enregistrement n'est pas trouvé dans la base locale, le backend peut
+aller chercher les informations (`serialNumber`, `clientCode`, `ip`) dans le
+CRM de l'entreprise, via un connecteur HTTP configurable
+(`backend/src/crm.ts`). L'équipement trouvé est importé dans la base locale
+(sans doublon) avant recalcul du mot de passe.
+
+Flux de `/api/resolve` :
+
+```
+données partielles -> base locale -> [non trouvé] -> CRM -> import -> recalcul
+                                     (CRM injoignable -> 502)
+```
+
+Configuration (`backend/.env.example`) :
+
+| Variable         | Rôle                                                        |
+|------------------|-------------------------------------------------------------|
+| `CRM_API_URL`    | URL de base du CRM ; si absente, le connecteur est désactivé |
+| `CRM_SEARCH_PATH`| Chemin de recherche (par défaut `/search`)                   |
+| `CRM_API_KEY`    | Clé d'API envoyée en `Authorization: Bearer ...` (optionnel) |
+
+Contrat attendu du CRM : `POST {CRM_API_URL}{CRM_SEARCH_PATH}` reçoit
+`{ serialNumber?, clientCode?, ip? }` et répond:
+
+- `200` + `{ "record": { "serialNumber", "clientCode", "ip" } }` si trouvé ;
+- `200` + `{ "record": null }` ou `404` si aucun équipement ne correspond.
+
+Si les deux chemins échouent, la réponse est `404` ; si le CRM renvoie une
+erreur ou est injoignable, la réponse est `502`.
 
 ## Démarrage
 
@@ -79,6 +137,8 @@ Pour une autre machine : adapter `VITE_API_URL` dans `frontend/.env`.
 2. Valider : les champs manquants sont complétés depuis la base.
 3. Le mot de passe recalculé s'affiche, avec options **copier**,
    **masquer** et **afficher**.
+4. « Régénérer (admin) » : après saisie du code administrateur, un nouveau
+   mot de passe est calculé (version +1) et affiché en remplacement.
 
 ## Tests
 
