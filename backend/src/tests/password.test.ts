@@ -1,8 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { generatePassword, meetsCriteria, PASSWORD_MIN_LENGTH } from '../services/password.js';
+import { initPasswords, generatePassword, meetsCriteria, PASSWORD_MIN_LENGTH } from '../services/password.js';
+
+// Initialiser le module password avant tous les tests
+// Utilise le .env pour récupérer PASSWORD_SECRET_KEY
+let passwordInitialized = false;
+test.before(async () => {
+  await initPasswords();
+  passwordInitialized = true;
+});
 
 test('le mot de passe est déterministe (recalculable)', () => {
+  if (!passwordInitialized) assert.fail('Password module not initialized');
   assert.equal(
     generatePassword('RTR-2024-000117', 'CL-7F3A'),
     generatePassword('RTR-2024-000117', 'CL-7F3A'),

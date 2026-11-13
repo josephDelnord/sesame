@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { initDb } from './services/db.js';
 import { seedIfEmpty } from './services/seed.js';
+import { initPasswords } from './services/password.js';
 import recordsRouter from './routes/records.js';
 import resolveRouter from './routes/resolve.js';
 import regenerateRouter from './routes/regenerate.js';
@@ -24,8 +25,16 @@ app.use(recordsRouter);
 app.use(resolveRouter);
 app.use(regenerateRouter);
 
-app.listen(PORT, () => {
-  initDb();
-  seedIfEmpty();
-  console.log(`Backend Sésame en écoute sur http://localhost:${PORT}`);
+app.listen(PORT, async () => {
+  // Initialisation asynchrone des services
+  try {
+    await initPasswords();
+    initDb();
+    seedIfEmpty();
+    console.log(`Backend Sésame en écoute sur http://localhost:${PORT}`);
+    console.log(`Vault: ${process.env.VAULT_ADDR ? 'configuré' : 'non configuré (utilise .env)'}`);
+  } catch (error) {
+    console.error('Erreur lors de l\'initialisation:', error);
+    process.exit(1);
+  }
 });

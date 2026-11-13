@@ -6,17 +6,14 @@ import { createHmac } from 'node:crypto';
  * Le mot de passe est déterministe et recalculable via HMAC-SHA256
  * avec un sel statique (PASSWORD_SECRET_KEY). Sans ce sel, il est
  * IMPOSSIBLE de recréer le mot de passe même avec les mêmes paramètres.
+ * 
+ * Le sel peut être récupéré depuis :
+ * 1. HashiCorp Vault (recommandé en production)
+ * 2. Variable d'environnement PASSWORD_SECRET_KEY (fallback pour dev)
  */
 
-// 🔐 Sel statique OBLIGATOIRE : doit être défini dans .env (min 32 caractères)
-const secret = process.env.PASSWORD_SECRET_KEY;
-if (!secret || secret.length < 32) {
-  throw new Error(
-    'PASSWORD_SECRET_KEY est OBLIGATOIRE (min 32 caractères) dans .env. ' +
-    'Générez-en une avec: openssl rand -hex 64'
-  );
-}
-const PASSWORD_SECRET: string = secret;
+// 🔐 Sel statique - sera initialisé par initPasswords() au démarrage
+let PASSWORD_SECRET: string | null = null;
 
 export const PASSWORD_MIN_LENGTH = 8;
 export const PASSWORD_LENGTH = 12;
@@ -27,8 +24,33 @@ const DIGITS = '23456789';
 const SPECIAL = '!@#$%&*+-_=';
 const MIXED = UPPER + LOWER + DIGITS + SPECIAL;
 
+/**
+ * Initialise le sel statique depuis Vault ou .env.
+ * Doit être appelé AU DÉMARRAGE de l'application (dans index.ts).
+ */
+export async function initPasswords(): Promise<void> {
+  if (PASSWORD_SECRET) return; // Déjà initialisé
+  
+  const { getPasswordSecretKey } = await import('./vault.js');
+  PASSWORD_SECRET = await getPasswordSecretKey();
+}
+
+/**
+ * Vérifie que le sel a bien été initialisé.
+ * @throws Error si initPasswords() n'a pas été appelé
+ */
+function ensureSecretInitialized(): void {
+  if (!PASSWORD_SECRET) {
+    throw new Error(
+      'Le module password n\'a pas été initialisé. ' +
+      'Appelez initPasswords() au démarrage de l\'application.'
+    );
+  }
+}
+
 function hmacSha256(input: string): Buffer {
-  return createHmac('sha256', PASSWORD_SECRET).update(input, 'utf8').digest();
+  ensureSecretInitialized();
+  return createHmac('sha256', PASSWORD_SECRET!).update(input, 'utf8').digest();
 }
 
 /**
