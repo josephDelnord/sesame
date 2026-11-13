@@ -20,7 +20,8 @@ VAULT_ADDR_LOCAL ?= http://0.0.0.0:$(VAULT_PORT)
 VAULT_ADDR ?= http://vault:$(VAULT_PORT)
 VAULT_CONTAINER ?= sesame-vault-1
 COMPOSE = docker compose
-DOCKER_PROFILES ?= dev backend frontend
+# Séparés par des virgules pour Docker Compose
+DOCKER_PROFILES ?= dev,backend,frontend
 
 # --- Fonction réutilisable pour exécuter des commandes dans Vault ---
 define VAULT_EXEC
@@ -55,7 +56,7 @@ docker-build: ## Construit les images Docker (backend + frontend)
 
 docker-up: ## Démarre les conteneurs en arrière-plan (selon DOCKER_PROFILES)
 	$(COMPOSE) --profile $(DOCKER_PROFILES) up -d
-	@echo "Services démarrés avec les profils : $(DOCKER_PROFILES)"
+	@echo "Services démarrés avec les profils : $(subst $(comma),$(space),$(DOCKER_PROFILES))"
 	@if echo " $(DOCKER_PROFILES) " | grep -q " frontend "; then \
 		echo "Interface : http://localhost:$(FRONTEND_PORT)"; \
 	fi
@@ -125,8 +126,8 @@ vault-init: vault-up wait-for-vault ## Démarre Vault et stocke les secrets
 
 vault-down: ## Arrête Vault
 	@echo "Arrêt de Vault..."
-	$(COMPOSE) --profile dev --profile test stop vault
-	$(COMPOSE) --profile dev --profile test rm -fsv vault
+	$(COMPOSE) --profile dev,test stop vault
+	$(COMPOSE) --profile dev,test rm -fsv vault
 
 vault-shell: ## Ouvre un shell admin dans le conteneur Vault (nécessite accès Docker)
 	@echo "⚠️  Accès admin - nécessite les droits Docker"
@@ -140,7 +141,7 @@ vault-shell: ## Ouvre un shell admin dans le conteneur Vault (nécessite accès 
 
 dev-up: ## Démarre tous les services en mode développement (Vault + backend + frontend)
 	@echo "🚀 Démarrage en mode DEVELOPPEMENT (avec Vault local)..."
-	@$(COMPOSE) --profile dev --profile backend --profile frontend up -d
+	@$(COMPOSE) --profile dev,backend,frontend up -d
 	$(call WAIT_FOR_VAULT)
 	@echo "✅ Tous les services démarrés :"
 	@echo "   Vault : http://localhost:$(VAULT_PORT)"
@@ -150,7 +151,7 @@ dev-up: ## Démarre tous les services en mode développement (Vault + backend + 
 prod-up: ## Démarre backend + frontend pour production (Vault externe requis)
 	@echo "🚀 Démarrage en mode PRODUCTION (Vault externe requis)..."
 	@echo "   Assurez-vous que VAULT_ADDR pointe vers votre Vault externe."
-	@$(COMPOSE) --profile backend --profile frontend up -d
+	@$(COMPOSE) --profile backend,frontend up -d
 	@echo "✅ Services production démarrés :"
 	@echo "   API : http://localhost:$(BACKEND_PORT)"
 	@echo "   Interface : http://localhost:$(FRONTEND_PORT)"
@@ -162,7 +163,7 @@ full-up: vault-init dev-up ## Démarre Vault + stocke les secrets + backend + fr
 
 docker-test-up: ## Démarre Vault + backend pour les tests d'intégration
 	@echo "🧪 Démarrage des services pour les tests d'intégration..."
-	@$(COMPOSE) --profile test --profile backend up -d vault
+	@$(COMPOSE) --profile test,backend up -d vault
 	@echo "⏳ Attente que Vault soit prêt..."
 	@while ! $(COMPOSE) --profile test ps vault | grep -q healthy; do sleep 1; done
 	@echo "✅ Services prêts pour les tests"
