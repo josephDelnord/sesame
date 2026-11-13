@@ -57,7 +57,7 @@ async function getVaultClient(): Promise<VaultClient | null> {
   if (!vaultClient) {
     const client = NodeVault({
       endpoint: process.env.VAULT_ADDR,
-      apiVersion: 'v2',
+      apiVersion: 'v1',
     });
     
     // Authentification avec AppRole si les fichiers sont disponibles
@@ -69,7 +69,6 @@ async function getVaultClient(): Promise<VaultClient | null> {
         await client.approleLogin({ role_id: roleId, secret_id: secretId });
         vaultClient = client;
       } catch (error) {
-        console.error('Erreur lors de l\'authentification AppRole:', error);
         return null;
       }
     } else if (process.env.VAULT_TOKEN) {
@@ -77,7 +76,6 @@ async function getVaultClient(): Promise<VaultClient | null> {
       client.token = process.env.VAULT_TOKEN;
       vaultClient = client as VaultClient;
     } else {
-      console.error('AppRole ou VAULT_TOKEN non configuré');
       return null;
     }
   }

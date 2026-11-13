@@ -6,14 +6,13 @@ services:
   backend:
     environment:
       VAULT_ADDR: http://vault:8200
-      VAULT_ROLE_ID_FILE: /run/secrets/vault_role_id
-      VAULT_SECRET_ID_FILE: /run/secrets/vault_secret_id
+      VAULT_ROLE_ID_FILE: /vault/secrets/vault_role_id
+      VAULT_SECRET_ID_FILE: /vault/secrets/vault_secret_id
     depends_on:
       vault:
         condition: service_healthy
-    secrets:
-      - vault_role_id
-      - vault_secret_id
+    volumes:
+      - vault_secrets:/vault/secrets:ro
 
   vault:
     image: hashicorp/vault:1.16
@@ -21,6 +20,7 @@ services:
     ports:
       - "8200:8200"
     environment:
+      VAULT_ADDR: http://0.0.0.0:8200
       VAULT_DEV_ROOT_TOKEN_ID: root
       VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
     healthcheck:
@@ -28,17 +28,13 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-      start_period: 10s
+      start_period: 15s
     volumes:
       - vault_dev_data:/vault/file
+      - vault_secrets:/vault/secrets
       - ./docker/vault:/docker-entrypoint-init.d:ro
     entrypoint: /docker-entrypoint-init.d/entrypoint.sh
 
-secrets:
-  vault_role_id:
-    file: ./docker/vault/secrets/vault_role_id
-  vault_secret_id:
-    file: ./docker/vault/secrets/vault_secret_id
-
 volumes:
   vault_dev_data:
+  vault_secrets:

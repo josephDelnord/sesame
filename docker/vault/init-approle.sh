@@ -6,7 +6,7 @@ set -e
 echo "⏳ Attente que Vault soit prêt..."
 
 # Exporter les variables pour vault CLI
-VAULT_ADDR="http://127.0.0.1:8200"
+VAULT_ADDR="http://0.0.0.0:8200"
 export VAULT_ADDR
 
 # Attendre que Vault réponde
@@ -33,11 +33,23 @@ fi
 if ! vault policy list | grep -q sesame-backend; then
   echo "📜 Création de la politique sesame-backend..."
   vault policy write sesame-backend - <<EOF
+# KV v2 - Accès en lecture complète
 path "secret/data/sesame" {
-  capabilities = ["read"]
+  capabilities = ["read", "list"]
 }
+path "secret/metadata/sesame" {
+  capabilities = ["read", "list"]
+}
+# KV v2 - Accès au backend KV
+path "secret/metadata/*" {
+  capabilities = ["list"]
+}
+path "secret/data/*" {
+  capabilities = ["read", "list"]
+}
+# KV v1 - Accès en lecture
 path "secret/sesame" {
-  capabilities = ["read"]
+  capabilities = ["read", "list"]
 }
 EOF
 fi
