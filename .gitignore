@@ -3,3 +3,6 @@ dist/
 *.log
 .env
 backend/data/db.json
+
+# artefacts de build
+*.tsbuildinfo
