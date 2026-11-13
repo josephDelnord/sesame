@@ -2,28 +2,9 @@
 
 ## Accès rapide aux secrets
 
-### Depuis la machine hôte
 ```bash
-# Récupérer PASSWORD_SECRET_KEY
-make vault-shell
-vault kv get -field=password_secret_key secret/data/sesame
-
-# Récupérer ADMIN_TOKEN
-make vault-shell
-vault kv get -field=admin_token secret/data/sesame
-
-# Afficher tous les secrets
 make vault-shell
 vault kv get secret/data/sesame
-```
-
-### En une commande (sans entrer dans le shell)
-```bash
-# PASSWORD_SECRET_KEY
-docker exec sesame-vault-1 sh -c 'export VAULT_ADDR=http://0.0.0.0:8200; export VAULT_TOKEN=$(cat /vault/secrets/vault_root_token); vault kv get -field=password_secret_key secret/data/sesame'
-
-# ADMIN_TOKEN
-docker exec sesame-vault-1 sh -c 'export VAULT_ADDR=http://0.0.0.0:8200; export VAULT_TOKEN=$(cat /vault/secrets/vault_root_token); vault kv get -field=admin_token secret/data/sesame'
 ```
 
 ---
@@ -122,10 +103,10 @@ vault kv put secret/data/sesame admin_token="$NEW_TOKEN"
 
 ## Sécurité
 
-- ✅ Ne jamais committer de secrets (tous les `.env` sont dans `.gitignore`)
-- ✅ Utiliser AppRole plutôt que le token root
-- ✅ Limiter les permissions de la politique
-- ✅ Désactiver le token root en production
-- ✅ Rotater les secrets périodiquement
-- ✅ Ne pas exposer Vault publiquement
-- ✅ Utiliser HTTPS en production
+- Ne jamais committer de secrets (tous les `.env` sont dans `.gitignore`)
+- Utiliser AppRole plutôt que le token root
+- Limiter les permissions de la politique
+- Désactiver le token root en production
+- Rotater les secrets périodiquement
+- Ne pas exposer Vault publiquement
+- Utiliser HTTPS en production
