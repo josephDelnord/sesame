@@ -2,13 +2,13 @@
 
 Application full-stack de génération et recalcul **déterministe** de mots de passe clients à partir du numéro de série (SN) d'un routeur et d'un code client.
 
-```
+```text
 password = FORMULE(SHA-256(SN :: code_client [:: v<version>]))
 ```
 
 ## Architecture
 
-```
+```text
 sesame/
 ├── .env                      # Variables Docker Compose
 ├── .env.example              # Template
@@ -41,6 +41,7 @@ sesame/
 ## Configuration
 
 ### Fichier `.env` à la racine
+
 ```ini
 FRONTEND_PORT=3000
 BACKEND_PORT=4000
@@ -62,6 +63,7 @@ Copiez le template : `cp .env.example .env`
 ## Démarrage
 
 ### Développement (avec Vault local)
+
 ```bash
 make full-up      # Tout en une commande (recommandé)
 # ou
@@ -70,11 +72,13 @@ make vault-shell  # Accès admin à Vault
 ```
 
 ### Production (Vault externe requis)
+
 ```bash
 make prod-up      # Backend + frontend uniquement
 ```
 
 ### Sans Docker
+
 ```bash
 # Backend
 cd backend && npm install && npm run dev
@@ -103,6 +107,7 @@ cd frontend && npm install && npm run dev
 ## HashiCorp Vault
 
 **Obligatoire** pour stocker les secrets :
+
 - `PASSWORD_SECRET_KEY` (64 bytes hex)
 - `ADMIN_TOKEN` (32 bytes hex)
 
@@ -115,6 +120,7 @@ Voir la documentation complète : [docs/VAULT_SECRETS.md](docs/VAULT_SECRETS.md)
 Flux : `données partielles → base locale → CRM → import → recalcul`
 
 Configuration (`backend/.env`) :
+
 ```ini
 CRM_API_URL=
 CRM_SEARCH_PATH=/search

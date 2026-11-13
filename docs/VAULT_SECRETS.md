@@ -3,6 +3,7 @@
 ## Accès rapide aux secrets
 
 ### Avec shell interactif
+
 ```bash
 make vault-shell
 
@@ -13,6 +14,7 @@ vault kv get -field=admin_token secret/data/sesame
 ```
 
 ### Sans shell (en une commande)
+
 ```bash
 # Récupérer PASSWORD_SECRET_KEY
 docker exec sesame-vault-1 sh -c 'export VAULT_ADDR=http://0.0.0.0:8200; export VAULT_TOKEN=$(cat /vault/secrets/vault_root_token); vault kv get -field=password_secret_key secret/data/sesame'
@@ -31,6 +33,7 @@ docker exec sesame-vault-1 sh -c 'export VAULT_ADDR=http://0.0.0.0:8200; export 
 **Chemin de stockage** (KV v2) : `secret/data/sesame`
 
 **Secrets stockés** :
+
 - `password_secret_key` (64 bytes hex) : sel pour la génération des mots de passe
 - `admin_token` (32 bytes hex) : token pour la régénération admin
 
@@ -41,6 +44,7 @@ docker exec sesame-vault-1 sh -c 'export VAULT_ADDR=http://0.0.0.0:8200; export 
 ### Développement (Docker Compose)
 
 Fichier `.env` à la racine :
+
 ```ini
 FRONTEND_PORT=3000
 BACKEND_PORT=4000
@@ -49,6 +53,7 @@ VAULT_ADDR=http://vault:8200
 ```
 
 Commandes :
+
 ```bash
 make full-up      # Démarre tout (Vault + backend + frontend)
 make dev-up       # Démarre tous les services
@@ -60,11 +65,13 @@ make vault-down   # Arrête Vault
 ### Production
 
 Variables backend :
+
 ```ini
 VAULT_ADDR=https://vault.prod.internal:8200
 ```
 
 Montage des volumes pour AppRole :
+
 ```yaml
 volumes:
   - vault_secrets:/run/secrets:ro
@@ -77,10 +84,12 @@ volumes:
 ### AppRole (recommandé)
 
 Fichiers montés depuis le conteneur Vault :
+
 - `/vault/secrets/vault_role_id`
 - `/vault/secrets/vault_secret_id`
 
 Politique requise :
+
 ```hcl
 path "secret/data/data/sesame" {
   capabilities = ["read", "list"]
@@ -92,6 +101,7 @@ path "secret/data/data/sesame" {
 ## Rotation des secrets
 
 ### Régénérer PASSWORD_SECRET_KEY
+
 ```bash
 make vault-shell
 NEW_SECRET=$(vault write -format=json sys/tools/random bytes=64 format=hex | jq -r '.data.random_bytes')
@@ -100,6 +110,7 @@ make docker-restart
 ```
 
 ### Régénérer ADMIN_TOKEN
+
 ```bash
 make vault-shell
 NEW_TOKEN=$(vault write -format=json sys/tools/random bytes=32 format=hex | jq -r '.data.random_bytes')
