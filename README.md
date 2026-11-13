@@ -134,7 +134,7 @@ make docker-logs   # suit les logs (Ctrl-C pour sortir)
 make docker-down   # arrête les conteneurs
 ```
 
-Une fois démarré : interface sur `http://localhost:5173`, API sur
+Une fois démarré : interface sur `http://localhost:3000`, API sur
 `http://localhost:4000` (testable avec `curl localhost:4000/api/health`).
 
 - `docker-compose.yml` : deux services (`sesame-backend`, `sesame-frontend`).
@@ -152,7 +152,7 @@ Une fois démarré : interface sur `http://localhost:5173`, API sur
 # Backend (VM 1) — http://localhost:4000
 cd backend && npm install && npm run dev
 
-# Frontend (VM 2) — http://localhost:5173
+# Frontend (VM 2) — http://localhost:3000
 cd frontend && npm install && npm run dev
 ```
 
@@ -168,7 +168,7 @@ Pour une autre machine : adapter `VITE_API_URL` dans `frontend/.env`
 (voir `frontend/.env.example`).
 
 Les conteneurs Docker et les serveurs de dev utilisent les mêmes ports
-(4000/5173) et la même base : lancez l'un **ou** l'autre.
+(4000/3000) et la même base : lancez l'un **ou** l'autre.
 
 ### Utilisation
 

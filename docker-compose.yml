@@ -28,7 +28,7 @@ services:
         - VITE_API_URL=
     container_name: sesame-frontend
     ports:
-      - "${FRONTEND_PORT:-5173}:80"
+      - "${FRONTEND_PORT:-3000}:80"
     depends_on:
       - backend
     restart: unless-stopped

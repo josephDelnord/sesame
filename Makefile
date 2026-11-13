@@ -5,7 +5,7 @@
 # Les commandes npm de développement et de test restent utilisables
 # directement dans backend/ et frontend/ (voir README).
 
-FRONTEND_PORT = 5173
+FRONTEND_PORT = 3000
 BACKEND_PORT = 4000
 COMPOSE = docker compose
 
@@ -23,7 +23,7 @@ docker: docker-build docker-up ## Construit les images puis démarre les contene
 docker-build: ## Construit les images Docker (backend + frontend)
 	$(COMPOSE) build
 
-docker-up: ## Démarre les conteneurs en arrière-plan (UI :5173, API :4000)
+docker-up: ## Démarre les conteneurs en arrière-plan (UI :3000, API :4000)
 	$(COMPOSE) up -d
 	@echo "Interface : http://localhost:$(FRONTEND_PORT) — API : http://localhost:$(BACKEND_PORT)"
 
@@ -40,7 +40,7 @@ docker-clean: ## Arrête les conteneurs et supprime les images locales
 
 kill-port: ## Libère un port occupé : make kill-port PORT=<numéro>
 	@if [ -z "$(PORT)" ]; then \
-		echo "Usage : make kill-port PORT=<numéro> (ex. 4000 ou 5173)"; \
+		echo "Usage : make kill-port PORT=<numéro> (ex. 4000 ou 3000)"; \
 		exit 2; \
 	fi
 	@if ! ss -ltn 2>/dev/null | grep -qE "[:.]$(PORT)[[:space:]]"; then \
