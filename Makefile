@@ -127,11 +127,10 @@ vault-down: ## Arrête Vault
 
 vault-shell: ## Ouvre un shell admin dans le conteneur Vault (nécessite accès Docker)
 	@echo "⚠️  Accès admin - nécessite les droits Docker"
-	@if [ -t 0 ]; then \
+	@if [ -t 1 ]; then \
 		docker exec -it $(VAULT_CONTAINER) sh -c 'export VAULT_ADDR=$(VAULT_ADDR_LOCAL); export VAULT_TOKEN=$$(cat /vault/secrets/vault_root_token); sh'; \
 	else \
-		echo "Erreur: vault-shell nécessite un terminal interactif. Essayez depuis un terminal."; \
-		exit 1; \
+		docker exec -i $(VAULT_CONTAINER) sh -c 'export VAULT_ADDR=$(VAULT_ADDR_LOCAL); export VAULT_TOKEN=$$(cat /vault/secrets/vault_root_token); sh'; \
 	fi
 
 # --- Convenience targets pour dev/prod ---
