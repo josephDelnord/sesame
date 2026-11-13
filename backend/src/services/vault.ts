@@ -1,6 +1,6 @@
 /**
  * Module d'intégration avec HashiCorp Vault pour la récupération
- * du sel statique PASSWORD_SECRET_KEY.
+ * des secrets PASSWORD_SECRET_KEY et ADMIN_TOKEN.
  * 
  * Utilise AppRole pour l'authentification (plus sécurisé que le token root).
  * En développement, les Role ID et Secret ID sont montés via Docker secrets.
@@ -18,16 +18,17 @@ interface VaultClient {
 // Singleton pour le client Vault
 let vaultClient: VaultClient | null = null;
 
+// Chemin KV v2 pour les secrets
+const SECRET_PATH = 'secret/data/data/sesame';
+
 /**
  * Récupère le Role ID depuis un fichier ou une variable d'environnement.
  */
 function getRoleId(): string | null {
-  // Essayer de lire depuis le fichier monté par Docker
   try {
     const roleIdPath = process.env.VAULT_ROLE_ID_FILE || '/run/secrets/vault_role_id';
     return readFileSync(roleIdPath, 'utf8').trim();
   } catch {
-    // Retourner null si le fichier n'existe pas
     return null;
   }
 }
@@ -68,7 +69,7 @@ async function getVaultClient(): Promise<VaultClient | null> {
       try {
         await client.approleLogin({ role_id: roleId, secret_id: secretId });
         vaultClient = client;
-      } catch (error) {
+      } catch {
         return null;
       }
     } else if (process.env.VAULT_TOKEN) {
@@ -83,13 +84,18 @@ async function getVaultClient(): Promise<VaultClient | null> {
 }
 
 /**
- * Récupère le PASSWORD_SECRET_KEY depuis Vault.
- * Vault est OBLIGATOIRE. Il n'y a plus de fallback sur .env.
- * Utilise AppRole pour l'authentification.
+ * Récupère un secret depuis Vault KV v2.
  * 
+ * @param field - Nom du champ à récupérer (ex: 'password_secret_key', 'admin_token')
+ * @param minLength - Longueur minimale requise
+ * @param fieldName - Nom affiché dans les messages d'erreur
  * @throws Error si Vault n'est pas configuré ou si le secret est introuvable
  */
-export async function getPasswordSecretKey(): Promise<string> {
+async function getSecretFromVault(
+  field: string,
+  minLength: number,
+  fieldName: string
+): Promise<string> {
   const vault = await getVaultClient();
 
   if (!vault) {
@@ -101,70 +107,46 @@ export async function getPasswordSecretKey(): Promise<string> {
   }
 
   try {
-    // KV v2 : chemin physique = secret/data/data/sesame
-    const result = await vault.read('secret/data/data/sesame');
+    const result = await vault.read(SECRET_PATH);
     
-    // Structure KV v2 : { data: { data: { password_secret_key: "..." } } }
+    // Structure KV v2 : { data: { data: { [field]: "..." } } }
     const v2Data = result?.data as { data?: Record<string, unknown> } | undefined;
-    if (v2Data?.data && typeof v2Data.data.password_secret_key === 'string') {
-      const secret = v2Data.data.password_secret_key as string;
-      if (secret.length >= 32) {
-        return secret;
+    if (v2Data?.data && typeof v2Data.data[field] === 'string') {
+      const value = v2Data.data[field] as string;
+      if (value.length >= minLength) {
+        return value;
       }
-      throw new Error('PASSWORD_SECRET_KEY dans Vault est trop court (min 32 caractères)');
+      throw new Error(`${fieldName} dans Vault est trop court (min ${minLength} caractères)`);
     }
     
     throw new Error(
-      'PASSWORD_SECRET_KEY introuvable dans Vault. ' +
-      'Vérifiez que le secret existe à secret/data/data/sesame.'
+      `${fieldName} introuvable dans Vault. ` +
+      `Vérifiez que le secret existe à ${SECRET_PATH}.`
     );
   } catch (error) {
     throw new Error(
-      `Impossible de récupérer PASSWORD_SECRET_KEY depuis Vault : ${(error as Error).message}`
+      `Impossible de récupérer ${fieldName} depuis Vault : ${(error as Error).message}`
     );
   }
 }
 
 /**
+ * Récupère le PASSWORD_SECRET_KEY depuis Vault.
+ * Vault est OBLIGATOIRE. Il n'y a plus de fallback sur .env.
+ * 
+ * @throws Error si Vault n'est pas configuré ou si le secret est introuvable
+ */
+export async function getPasswordSecretKey(): Promise<string> {
+  return getSecretFromVault('password_secret_key', 32, 'PASSWORD_SECRET_KEY');
+}
+
+/**
  * Récupère l'ADMIN_TOKEN depuis Vault.
- * Utilise AppRole pour l'authentification.
  * 
  * @throws Error si Vault n'est pas configuré ou si le token est introuvable
  */
 export async function getAdminToken(): Promise<string> {
-  const vault = await getVaultClient();
-
-  if (!vault) {
-    throw new Error(
-      'Vault est OBLIGATOIRE. Configurez VAULT_ADDR et soit : ' +
-      '(1) VAULT_ROLE_ID_FILE + VAULT_SECRET_ID_FILE pour AppRole, ' +
-      '(2) VAULT_TOKEN pour l\'authentification directe.'
-    );
-  }
-
-  try {
-    // KV v2 : chemin physique = secret/data/data/sesame
-    const result = await vault.read('secret/data/data/sesame');
-    
-    // Structure KV v2 : { data: { data: { admin_token: "..." } } }
-    const v2Data = result?.data as { data?: Record<string, unknown> } | undefined;
-    if (v2Data?.data && typeof v2Data.data.admin_token === 'string') {
-      const token = v2Data.data.admin_token as string;
-      if (token.length >= 16) {
-        return token;
-      }
-      throw new Error('ADMIN_TOKEN dans Vault est trop court (min 16 caractères)');
-    }
-    
-    throw new Error(
-      'ADMIN_TOKEN introuvable dans Vault. ' +
-      'Vérifiez que le secret existe à secret/data/data/sesame.'
-    );
-  } catch (error) {
-    throw new Error(
-      `Impossible de récupérer ADMIN_TOKEN depuis Vault : ${(error as Error).message}`
-    );
-  }
+  return getSecretFromVault('admin_token', 16, 'ADMIN_TOKEN');
 }
 
 /**
@@ -173,3 +155,6 @@ export async function getAdminToken(): Promise<string> {
 export function isVaultConfigured(): boolean {
   return !!process.env.VAULT_ADDR;
 }
+
+// Export pour les tests
+export { SECRET_PATH, getVaultClient };
