@@ -5,7 +5,11 @@
 ### Avec shell interactif
 ```bash
 make vault-shell
-vault kv get secret/data/sesame
+
+# Dans le shell Vault, exécutez une de ces commandes :
+vault kv get secret/data/sesame                    # Tous les secrets
+vault kv get -field=password_secret_key secret/data/sesame
+vault kv get -field=admin_token secret/data/sesame
 ```
 
 ### Sans shell (en une commande)
