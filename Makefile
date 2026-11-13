@@ -76,10 +76,12 @@ vault-up: ## Démarre Vault pour le développement (avec AppRole auto-configuré
 	@echo "⏳ Attente que Vault soit prêt..."
 	@while ! $(COMPOSE) ps vault | grep -q healthy; do sleep 1; done
 	@echo "✅ Vault et AppRole initialisés"
+	@sleep 3
+	@echo "Token root généré : $$(docker exec sesame-vault-1 cat /vault/secrets/vault_root_token)"
 
 vault-secrets: ## Génère et stocke un PASSWORD_SECRET_KEY aléatoire dans Vault (dev)
 	@echo "Génération et stockage du secret dans Vault..."
-	@docker exec sesame-vault-1 sh -c 'export VAULT_ADDR=http://0.0.0.0:8200; export VAULT_TOKEN=root; SECRET=$$(vault write -format=json sys/tools/random bytes=64 format=hex 2>/dev/null | sed -n "s/.*\"random_bytes\": \"\([^\"]*\).*/\1/p"); /bin/vault kv put secret/data/sesame password_secret_key="$$SECRET" && echo "✅ Secret généré et stocké dans Vault!"'
+	@docker exec sesame-vault-1 sh -c 'export VAULT_ADDR=http://0.0.0.0:8200; export VAULT_TOKEN=$$(cat /vault/secrets/vault_root_token); SECRET=$$(vault write -format=json sys/tools/random bytes=64 format=hex 2>/dev/null | sed -n "s/.*\"random_bytes\": \"\([^\"]*\).*/\1/p"); /bin/vault kv put secret/data/sesame password_secret_key="$$SECRET" && echo "✅ Secret généré et stocké dans Vault!"'
 
 vault-init: vault-up vault-secrets ## Démarre Vault et stocke le secret via AppRole
 
@@ -90,14 +92,14 @@ vault-down: ## Arrête Vault
 vault-shell: ## Ouvre un shell dans le conteneur Vault avec les variables configurées
 	@echo "Ouverture d'un shell dans Vault..."
 	@echo "Utilisez : vault kv get secret/data/sesame"
-	@docker exec -it sesame-vault-1 sh -c 'export VAULT_ADDR=http://0.0.0.0:8200; export VAULT_TOKEN=root; sh'
+	@docker exec -it sesame-vault-1 sh -c 'export VAULT_ADDR=http://0.0.0.0:8200; export VAULT_TOKEN=$$(cat /vault/secrets/vault_root_token); sh'
 
-vault-ui: ## Affiche l'URL de l'UI Vault
+vault-ui: ## Affiche l'URL de l'UI Vault et le token root
 	@echo "UI Vault disponible à : http://localhost:8200"
-	@echo "Token d'accès : root"
+	@echo "Token d'accès : $$(docker exec sesame-vault-1 cat /vault/secrets/vault_root_token)"
 
 vault-get-secret: ## Affiche le PASSWORD_SECRET_KEY stocké dans Vault
 	@echo "Récupération du secret depuis Vault..."
-	@docker exec sesame-vault-1 sh -c 'export VAULT_ADDR=http://0.0.0.0:8200; export VAULT_TOKEN=root; /bin/vault kv get -field=password_secret_key secret/data/sesame'
+	@docker exec sesame-vault-1 sh -c 'export VAULT_ADDR=http://0.0.0.0:8200; export VAULT_TOKEN=$$(cat /vault/secrets/vault_root_token); /bin/vault kv get -field=password_secret_key secret/data/sesame'
 
 full-up: vault-init docker-up ## Démarre Vault + stocke le secret + backend + frontend (tout-en-un)

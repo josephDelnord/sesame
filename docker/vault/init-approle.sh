@@ -9,6 +9,12 @@ echo "⏳ Attente que Vault soit prêt..."
 VAULT_ADDR="http://0.0.0.0:8200"
 export VAULT_ADDR
 
+# Lire le token root depuis le fichier
+if [ -f /vault/secrets/vault_root_token ]; then
+  VAULT_TOKEN=$(cat /vault/secrets/vault_root_token)
+  export VAULT_TOKEN
+fi
+
 # Attendre que Vault réponde
 TRY=0
 MAX_TRY=30
