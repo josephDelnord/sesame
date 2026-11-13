@@ -1,8 +1,48 @@
+# Fichiers générés et temporaires
 node_modules/
 dist/
 *.log
-.env
-backend/data/db.json
 
-# artefacts de build
+# Fichiers de configuration locale
+.env
+.env.local
+.env.*.local
+
+# Données locales
+backend/data/db.json
+backend/data/*.json
+
+# Artefacts de build TypeScript
 *.tsbuildinfo
+*.js.map
+
+# IDE et éditeurs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Docker
+.docker/
+
+# Vault
+vault_dev_data/
+vault_secrets/
+
+# Secrets et tokens
+*.token
+*.key
+*.pem
+*.crt
+
+# Build Docker
+.docker
+build/
+
+# Cache npm
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
