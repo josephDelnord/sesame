@@ -76,8 +76,6 @@ vault-up: ## Démarre Vault pour le développement (avec AppRole auto-configuré
 	@echo "⏳ Attente que Vault soit prêt..."
 	@while ! $(COMPOSE) ps vault | grep -q healthy; do sleep 1; done
 	@echo "✅ Vault et AppRole initialisés"
-	@sleep 3
-	@echo "Token root généré : $$(docker exec sesame-vault-1 cat /vault/secrets/vault_root_token)"
 
 vault-secrets: ## Génère et stocke un PASSWORD_SECRET_KEY aléatoire dans Vault (dev)
 	@echo "Génération et stockage du secret dans Vault..."
