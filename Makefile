@@ -73,12 +73,18 @@ kill-port: ## Libère un port occupé : make kill-port PORT=<numéro>
 vault-up: ## Démarre Vault pour le développement (avec AppRole auto-configuré)
 	$(COMPOSE) up -d vault
 	@echo "Vault démarré : http://localhost:8200"
-	@echo "⏳ Attente de l'initialisation AppRole..."
-	@sleep 20
-	@echo "✅ Vault et AppRole prêts"
+	@echo "⏳ Attente que Vault soit prêt..."
+	@while ! $(COMPOSE) ps vault | grep -q healthy; do sleep 1; done
+	@echo "✅ Vault et AppRole initialisés"
+
+vault-secrets: ## Stocke le PASSWORD_SECRET_KEY dans Vault (dev)
+	@echo "Stockage du secret dans Vault..."
+	@docker exec sesame-vault-1 sh -c 'export VAULT_ADDR=http://0.0.0.0:8200; export VAULT_TOKEN=root; /bin/vault kv put secret/data/sesame password_secret_key=2f7e4c8a0b1d3e5c9b2a4d6e8f0c1a3b5d7e9f2c4a6b8d0e1f3c5a7b9d2e4f6 && echo "✅ Secret stocké dans Vault!"'
+
+vault-init: vault-up vault-secrets ## Démarre Vault et stocke le secret via AppRole
 
 vault-down: ## Arrête Vault
 	$(COMPOSE) stop vault
 	$(COMPOSE) rm -fsv vault
 
-full-up: vault-up docker-up ## Démarre Vault + AppRole + backend + frontend (tout-en-un)
+full-up: vault-init docker-up ## Démarre Vault + stocke le secret + backend + frontend (tout-en-un)
