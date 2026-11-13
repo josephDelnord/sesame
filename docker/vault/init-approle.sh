@@ -72,9 +72,9 @@ mkdir -p /vault/secrets
 echo "$ROLE_ID" > /vault/secrets/vault_role_id
 echo "$SECRET_ID" > /vault/secrets/vault_secret_id
 
-# Stocker le PASSWORD_SECRET_KEY dans Vault
-PASSWORD_SECRET="2f7e4c8a0b1d3e5c9b2a4d6e8f0c1a3b5d7e9f2c4a6b8d0e1f3c5a7b9d2e4f6"
-echo "📦 Stockage du secret dans Vault..."
+# Générer et stocker le PASSWORD_SECRET_KEY dans Vault (64 bytes hex = 128 caractères)
+echo "📦 Génération et stockage du secret dans Vault..."
+PASSWORD_SECRET=$(vault read -field=random_hex sys/tools/random/64)
 vault kv put secret/data/sesame password_secret_key="$PASSWORD_SECRET"
 
 # Stocker aussi en KV v1 pour compatibilité
@@ -83,7 +83,7 @@ vault kv put secret/sesame password_secret_key="$PASSWORD_SECRET"
 echo "✅ Vault initialisé avec AppRole!"
 echo "   Role ID: $ROLE_ID"
 echo "   Secret ID: $SECRET_ID"
-echo "   PASSWORD_SECRET_KEY stocké dans Vault"
+echo "   PASSWORD_SECRET_KEY généré et stocké dans Vault"
 
 # Garder le conteneur en vie
 sleep infinity
