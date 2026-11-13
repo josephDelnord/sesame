@@ -89,17 +89,8 @@ vault-down: ## Arrête Vault
 	$(COMPOSE) stop vault
 	$(COMPOSE) rm -fsv vault
 
-vault-shell: ## Ouvre un shell dans le conteneur Vault avec les variables configurées
-	@echo "Ouverture d'un shell dans Vault..."
-	@echo "Utilisez : vault kv get secret/data/sesame"
-	@docker exec -it sesame-vault-1 sh -c 'export VAULT_ADDR=http://0.0.0.0:8200; export VAULT_TOKEN=$$(cat /vault/secrets/vault_root_token); sh'
-
-vault-ui: ## Affiche l'URL de l'UI Vault et le token root
-	@echo "UI Vault disponible à : http://localhost:8200"
-	@echo "Token d'accès : $$(docker exec sesame-vault-1 cat /vault/secrets/vault_root_token)"
-
-vault-get-secret: ## Affiche le PASSWORD_SECRET_KEY stocké dans Vault
-	@echo "Récupération du secret depuis Vault..."
-	@docker exec sesame-vault-1 sh -c 'export VAULT_ADDR=http://0.0.0.0:8200; export VAULT_TOKEN=$$(cat /vault/secrets/vault_root_token); /bin/vault kv get -field=password_secret_key secret/data/sesame'
+vault-shell: ## Ouvre un shell admin dans le conteneur Vault (nécessite accès Docker)
+	@echo "⚠️  Accès admin - nécessite les droits Docker"
+	@docker exec -it sesame-vault-1 sh -c 'export VAULT_ADDR=http://0.0.0.0:8200; export VAULT_TOKEN=$(cat /vault/secrets/vault_root_token); sh'
 
 full-up: vault-init docker-up ## Démarre Vault + stocke le secret + backend + frontend (tout-en-un)

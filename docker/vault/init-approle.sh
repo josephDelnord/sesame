@@ -39,25 +39,11 @@ fi
 if ! vault policy list | grep -q sesame-backend; then
   echo "📜 Création de la politique sesame-backend..."
   vault policy write sesame-backend - <<EOF
-# KV v2 - Accès en lecture complète
-path "secret/data/sesame" {
-  capabilities = ["read", "list"]
-}
+# KV v2 - Accès en lecture complète au secret
 path "secret/data/data/sesame" {
   capabilities = ["read", "list"]
 }
 path "secret/metadata/sesame" {
-  capabilities = ["read", "list"]
-}
-# KV v2 - Accès au backend KV (pour lister)
-path "secret/metadata/*" {
-  capabilities = ["list"]
-}
-path "secret/data/*" {
-  capabilities = ["list"]
-}
-# KV v1 - Accès en lecture (fallback)
-path "secret/sesame" {
   capabilities = ["read", "list"]
 }
 EOF
@@ -81,13 +67,10 @@ mkdir -p /vault/secrets
 echo "$ROLE_ID" > /vault/secrets/vault_role_id
 echo "$SECRET_ID" > /vault/secrets/vault_secret_id
 
-# Générer et stocker le PASSWORD_SECRET_KEY dans Vault (KV v2 + KV v1 pour compatibilité)
+# Générer et stocker le PASSWORD_SECRET_KEY dans Vault (KV v2 uniquement)
 echo "📦 Génération et stockage du secret dans Vault..."
 PASSWORD_SECRET=$(vault write -format=json sys/tools/random bytes=64 format=hex 2>/dev/null | sed -n 's/.*"random_bytes": "\([^"]*\).*/\1/p')
 vault kv put secret/data/sesame password_secret_key="$PASSWORD_SECRET"
-
-# Stocker aussi en KV v1 pour compatibilité avec node-vault
-vault kv put secret/sesame password_secret_key="$PASSWORD_SECRET"
 
 echo "✅ Vault initialisé avec AppRole!"
 echo "   Role ID: $ROLE_ID"

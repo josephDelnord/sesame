@@ -101,8 +101,8 @@ export async function getPasswordSecretKey(): Promise<string> {
   }
 
   try {
-    // KV v2 : chemin = secret/data/sesame
-    const result = await vault.read('secret/data/sesame');
+    // KV v2 : chemin physique = secret/data/data/sesame
+    const result = await vault.read('secret/data/data/sesame');
     
     // Structure KV v2 : { data: { data: { password_secret_key: "..." } } }
     const v2Data = result?.data as { data?: Record<string, unknown> } | undefined;
@@ -114,20 +114,9 @@ export async function getPasswordSecretKey(): Promise<string> {
       throw new Error('PASSWORD_SECRET_KEY dans Vault est trop court (min 32 caractères)');
     }
     
-    // KV v1 fallback : chemin = secret/sesame
-    const v1Result = await vault.read('secret/sesame');
-    const v1Data = v1Result?.data as Record<string, unknown> | undefined;
-    if (v1Data && typeof v1Data.password_secret_key === 'string') {
-      const secret = v1Data.password_secret_key as string;
-      if (secret.length >= 32) {
-        return secret;
-      }
-      throw new Error('PASSWORD_SECRET_KEY dans Vault est trop court (min 32 caractères)');
-    }
-    
     throw new Error(
       'PASSWORD_SECRET_KEY introuvable dans Vault. ' +
-      'Vérifiez que le secret existe à secret/data/sesame ou secret/sesame.'
+      'Vérifiez que le secret existe à secret/data/data/sesame.'
     );
   } catch (error) {
     throw new Error(
