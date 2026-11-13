@@ -5,20 +5,25 @@
 ### Depuis la machine hôte
 ```bash
 # Récupérer PASSWORD_SECRET_KEY
-docker exec sesame-vault-1 sh -c 'export VAULT_ADDR=http://0.0.0.0:8200; export VAULT_TOKEN=$(cat /vault/secrets/vault_root_token); vault kv get -field=password_secret_key secret/data/sesame'
+make vault-shell
+vault kv get -field=password_secret_key secret/data/sesame
 
 # Récupérer ADMIN_TOKEN
-docker exec sesame-vault-1 sh -c 'export VAULT_ADDR=http://0.0.0.0:8200; export VAULT_TOKEN=$(cat /vault/secrets/vault_root_token); vault kv get -field=admin_token secret/data/sesame'
+make vault-shell
+vault kv get -field=admin_token secret/data/sesame
 
 # Afficher tous les secrets
+make vault-shell
 vault kv get secret/data/sesame
 ```
 
-### Depuis le conteneur Vault
+### En une commande (sans entrer dans le shell)
 ```bash
-docker exec -it sesame-vault-1 sh
-VAULT_TOKEN=$(cat /vault/secrets/vault_root_token)
-vault kv get secret/data/sesame
+# PASSWORD_SECRET_KEY
+docker exec sesame-vault-1 sh -c 'export VAULT_ADDR=http://0.0.0.0:8200; export VAULT_TOKEN=$(cat /vault/secrets/vault_root_token); vault kv get -field=password_secret_key secret/data/sesame'
+
+# ADMIN_TOKEN
+docker exec sesame-vault-1 sh -c 'export VAULT_ADDR=http://0.0.0.0:8200; export VAULT_TOKEN=$(cat /vault/secrets/vault_root_token); vault kv get -field=admin_token secret/data/sesame'
 ```
 
 ---
@@ -51,6 +56,7 @@ make full-up      # Démarre tout (Vault + backend + frontend)
 make dev-up       # Démarre tous les services
 make vault-up     # Démarre uniquement Vault
 make vault-shell  # Shell admin dans Vault
+make vault-down   # Arrête Vault
 ```
 
 ### Production
@@ -89,6 +95,7 @@ path "secret/data/data/sesame" {
 
 ### Régénérer PASSWORD_SECRET_KEY
 ```bash
+make vault-shell
 NEW_SECRET=$(vault write -format=json sys/tools/random bytes=64 format=hex | jq -r '.data.random_bytes')
 vault kv put secret/data/sesame password_secret_key="$NEW_SECRET"
 make docker-restart
@@ -96,6 +103,7 @@ make docker-restart
 
 ### Régénérer ADMIN_TOKEN
 ```bash
+make vault-shell
 NEW_TOKEN=$(vault write -format=json sys/tools/random bytes=32 format=hex | jq -r '.data.random_bytes')
 vault kv put secret/data/sesame admin_token="$NEW_TOKEN"
 ```
