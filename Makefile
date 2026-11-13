@@ -12,7 +12,7 @@ COMPOSE = docker compose
 .DEFAULT_GOAL := help
 
 .PHONY: help docker docker-build docker-up docker-down docker-logs \
-        docker-restart docker-clean kill-port
+        docker-restart docker-clean kill-port vault-up vault-init vault-down vault-secrets
 
 help: ## Affiche cette aide
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | \
@@ -67,3 +67,19 @@ kill-port: ## Libère un port occupé : make kill-port PORT=<numéro>
 		kill -9 $$pids 2>/dev/null || true; \
 	fi; \
 	echo "Port $(PORT) libéré."
+
+# --- Vault ---
+
+vault-up: ## Démarre Vault pour le développement
+	$(COMPOSE) up -d vault
+	@echo "Vault démarré : http://localhost:8200 (Token: root)"
+
+vault-down: ## Arrête Vault
+	$(COMPOSE) stop vault
+	$(COMPOSE) rm -fsv vault
+
+vault-secrets: ## Stocke le PASSWORD_SECRET_KEY dans Vault (dev)
+	@echo "Stockage du secret dans Vault..."
+	@docker exec sesame-vault-1 sh -c 'export VAULT_ADDR=http://127.0.0.1:8200; export VAULT_TOKEN=root; /bin/vault kv put secret/data/sesame password_secret_key=2f7e4c8a0b1d3e5c9b2a4d6e8f0c1a3b5d7e9f2c4a6b8d0e1f3c5a7b9d2e4f6 && echo "✅ Secret stocké dans Vault!"'
+
+vault-init: vault-up vault-secrets ## Démarre Vault et stocke le secret
