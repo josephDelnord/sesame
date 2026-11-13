@@ -153,7 +153,7 @@ export default function PasswordForm() {
               <button type="button" onClick={() => setVisible((v) => !v)}>
                 {visible ? 'Masquer' : 'Afficher'}
               </button>
-              <button type="button" onClick={handleCopy}>
+              <button type="button" onClick={handleCopy} className={copied ? 'copied' : ''}>
                 {copied ? 'Copié !' : 'Copier'}
               </button>
             </div>
