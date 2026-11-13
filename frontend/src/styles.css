@@ -308,6 +308,9 @@ body::after {
   font-size: 0.97rem;
   line-height: 1.6;
   color: var(--muted);
+  text-align: justify;
+  text-wrap: pretty;
+  hyphens: auto;
 }
 
 /* ----------------------------- Carte ----------------------------- */
