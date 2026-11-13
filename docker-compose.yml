@@ -1,0 +1,34 @@
+name: sesame
+
+services:
+  # VM 1 — API "CRM" : génération et recalcul des mots de passe
+  backend:
+    build: ./backend
+    container_name: sesame-backend
+    ports:
+      - "${BACKEND_PORT:-4000}:4000"
+    # Configuration : reprend backend/.env s'il existe (ADMIN_TOKEN, CRM_*),
+    # sinon les valeurs d'environnement du shell. Jamais dans l'image.
+    env_file:
+      - path: ./backend/.env
+        required: false
+    environment:
+      - PORT=4000
+    volumes:
+      # La base JSON reste sur la machine hôte, partagée avec le mode dev.
+      - ./backend/data:/app/data
+    restart: unless-stopped
+
+  # VM 2 — Interface React compilée, servie par nginx (proxifie /api -> backend)
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Laisser vide pour la même origine ; ex. http://serveur:4000 sinon.
+        - VITE_API_URL=
+    container_name: sesame-frontend
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

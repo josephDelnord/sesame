@@ -8,17 +8,31 @@ code client.
 
 ```
 sesame/
+├── Makefile                 # Orchestration Docker (make docker, kill-port…)
+├── docker-compose.yml       # Services sesame-backend et sesame-frontend
 ├── backend/                 # VM 1 — API "CRM" (Node.js + Express + TypeScript)
+│   ├── Dockerfile           # Build multi-étapes (tsc → runtime minimal)
+│   ├── .env.example         # Configuration documentée (copier en .env)
+│   ├── data/db.json         # Base JSON (montée depuis l'hôte en Docker)
 │   └── src/
-│       ├── index.ts         # Serveur HTTP + routes
-│       ├── password.ts      # Formule de génération (hash recalculable)
-│       ├── password.test.ts # Tests de la formule
-│       ├── db.ts            # Base de données (stockage JSON)
+│       ├── index.ts         # Serveur HTTP + routes (dont régénération admin)
+│       ├── password.ts      # Formule de génération (hash recalculable versionné)
+│       ├── password.test.ts # Tests de la formule et des versions
+│       ├── db.ts            # Base de données (stockage JSON, upsert CRM)
+│       ├── crm.ts           # Connecteur HTTP vers le CRM de l'entreprise
+│       ├── crm.test.ts      # Tests du connecteur
 │       └── seed.ts          # Données d'exemple
 └── frontend/                # VM 2 — Interface utilisateur (React + TypeScript + Vite)
+    ├── Dockerfile           # Build multi-étapes (Vite → nginx)
+    ├── nginx.conf           # Sert le build et proxifie /api vers le backend
+    ├── .env.example         # VITE_API_URL (vide = même origine)
+    ├── index.html           # Polices + application du thème avant rendu
     └── src/
-        ├── App.tsx
-        └── components/PasswordForm.tsx
+        ├── App.tsx          # En-tête, bascule de thème clair/sombre, pied de page
+        ├── api.ts           # Client HTTP typé (resolve, regenerate)
+        ├── styles.css       # Thème sombre (par défaut) et clair en variables CSS
+        └── components/
+            └── PasswordForm.tsx
 ```
 
 ## Principe
@@ -31,9 +45,10 @@ Le mot de passe est déterministe et recalculable :
 - Le hash est transformé en chaîne texte conforme aux critères prédéfinis
   (12 caractères, au moins une majuscule, une minuscule, un chiffre et un
   caractère spécial — donc bien supérieur au minimum de 8 caractères).
-- Le même couple (SN, code client) produit **toujours** le même mot de passe :
-  il peut donc être régénéré sur la VM 2 à partir de données partielles
-  (IP seule, code client seul, etc.) via la base de données.
+- Le même couple (SN, code client) produit **toujours** le même mot de passe
+  pour une version donnée (voir « Régénération ») : il peut donc être régénéré
+  sur la VM 2 à partir de données partielles (IP seule, code client seul,
+  etc.) via la base de données.
 
 ## Endpoints (backend, port 4000)
 
@@ -108,19 +123,37 @@ erreur ou est injoignable, la réponse est `502`.
 
 ## Démarrage
 
-Toutes les commandes s'exécutent depuis la racine du projet via le
-`Makefile` (`make` seul affiche l'aide) :
+Le Makefile orchestre uniquement Docker. Les commandes npm de développement
+restent utilisables directement dans `backend/` et `frontend/`.
+
+### Docker (recommandé)
 
 ```bash
-make install      # dépendances backend + frontend
-make dev          # backend (VM 1, port 4000) + frontend (VM 2, port 5173)
+make docker        # construit les images puis démarre les conteneurs
+make docker-logs   # suit les logs (Ctrl-C pour sortir)
+make docker-down   # arrête les conteneurs
 ```
 
-Démarrage séparé si les VM sont distinctes :
+Une fois démarré : interface sur `http://localhost:5173`, API sur
+`http://localhost:4000` (testable avec `curl localhost:4000/api/health`).
+
+- `docker-compose.yml` : deux services (`sesame-backend`, `sesame-frontend`).
+- La configuration (`ADMIN_TOKEN`, `CRM_*`) est lue depuis `backend/.env` via
+  `env_file` — jamais copiée dans l'image.
+- La base `backend/data/db.json` est montée depuis la machine hôte :
+  supprimez le fichier (ou `rm backend/data/db.json`) pour réinitialiser
+  la base, qui se ré-amorce au redémarrage du conteneur.
+- Ports personnalisés : `FRONTEND_PORT=8080 BACKEND_PORT=14000 make docker-up`.
+- Port déjà occupé hors Docker : `make kill-port PORT=<numéro>`.
+
+### Développement local (sans Docker)
 
 ```bash
-make dev-backend    # uniquement l'API   — http://localhost:4000
-make dev-frontend   # uniquement l'UI    — http://localhost:5173
+# Backend (VM 1) — http://localhost:4000
+cd backend && npm install && npm run dev
+
+# Frontend (VM 2) — http://localhost:5173
+cd frontend && npm install && npm run dev
 ```
 
 Au premier lancement, copier puis adapter la configuration locale
@@ -130,19 +163,12 @@ Au premier lancement, copier puis adapter la configuration locale
 cp backend/.env.example backend/.env
 ```
 
-La base est initialisée et alimentée automatiquement au démarrage
-(`make seed` la réinitialise) — équivalent du back-end CRM qui génère
-les mots de passe à la création des clients.
-
 Le serveur de développement Vite proxifie `/api` vers `http://localhost:4000`.
 Pour une autre machine : adapter `VITE_API_URL` dans `frontend/.env`
 (voir `frontend/.env.example`).
 
-### Production
-
-```bash
-make serve    # compile (make build) puis démarre l'API compilée (port 4000)
-```
+Les conteneurs Docker et les serveurs de dev utilisent les mêmes ports
+(4000/5173) et la même base : lancez l'un **ou** l'autre.
 
 ### Utilisation
 
@@ -153,10 +179,17 @@ make serve    # compile (make build) puis démarre l'API compilée (port 4000)
 4. « Régénérer (admin) » : après saisie du code administrateur, un nouveau
    mot de passe est calculé (version +1) et affiché en remplacement.
 
+### Interface
+
+L'interface (thème « Sésame, ouvre-toi ») propose un mode sombre (par
+défaut) et un mode clair, basculables via le bouton soleil/lune de
+l'en-tête. Le choix est mémorisé dans le navigateur (`localStorage`) et
+le thème initial suit la préférence du système (`prefers-color-scheme`).
+
 ## Tests
 
 ```bash
-make test
+cd backend && npm test
 ```
 
 Vérifie le déterminisme du mot de passe, le respect des critères,
@@ -169,4 +202,9 @@ connecteur CRM.
   isolé derrière le module `db.ts` : il peut être remplacé par SQLite ou
   PostgreSQL sans toucher au reste du code.
 - Les mots de passe ne sont pas stockés en base : ils sont toujours
-  recalculés à partir du SN et du code client.
+  recalculés à partir du SN, du code client et de la version courante.
+- Les fichiers `backend/.env` et `frontend/.env` ne sont pas versionnés
+  (seuls `.env.example` le sont) et aucun secret n'entre dans les images
+  Docker.
+- En Docker, le frontend conteneurisé appelle l'API en même origine via le
+  proxy nginx ; en développement, c'est le proxy Vite qui joue ce rôle.
