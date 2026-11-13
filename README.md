@@ -1,6 +1,6 @@
 # Sésame — Gestion sécurisée de mots de passe clients
 
-Application full-stack de génération et recalcul **déterministe** de mots de passe clients à partir du numéro de série (SN) d'un routeur et d'un code client.
+Application full-stack de génération et recalcul **déterministe** de mots de passe clients :
 
 ```text
 password = FORMULE(SHA-256(SN :: code_client [:: v<version>]))
@@ -10,37 +10,19 @@ password = FORMULE(SHA-256(SN :: code_client [:: v<version>]))
 
 ```text
 sesame/
-├── .env                      # Variables Docker Compose
-├── .env.example              # Template
-├── Makefile                  # Orchestration Docker
-├── docker-compose.yml        # Services (backend + frontend + Vault)
-├── docker/
-│   ├── backend/Dockerfile
-│   ├── frontend/Dockerfile
-│   └── vault/                # Scripts d'initialisation
-│       ├── common.sh
-│       ├── entrypoint.sh
-│       └── init-approle.sh
+├── .env                      # Configuration Docker Compose
+├── Makefile                  # Orchestration
+├── docker-compose.yml        # Services
 ├── backend/
-│   ├── .env.example
-│   ├── data/db.json
+│   ├── .env                  # Configuration locale
 │   └── src/
-│       ├── index.ts
-│       ├── routes/
-│       ├── middleware/
-│       ├── services/        # Include vault.ts
-│       └── tests/
 └── frontend/
-    ├── .env.example
     └── src/
-        ├── App.tsx
-        ├── main.tsx
-        └── components/
 ```
 
 ## Configuration
 
-### Fichier `.env` à la racine
+### À la racine
 
 ```ini
 FRONTEND_PORT=3000
@@ -51,7 +33,17 @@ VAULT_ADDR=http://vault:8200
 
 Copiez le template : `cp .env.example .env`
 
-### Profils Docker Compose
+### Backend
+
+Configuration dans `backend/.env` :
+```ini
+PORT=4000
+CRM_API_URL=
+CRM_SEARCH_PATH=/search
+CRM_API_KEY=
+```
+
+## Profils Docker Compose
 
 | Profil | Services | Usage |
 |--------|----------|-------|
@@ -65,9 +57,7 @@ Copiez le template : `cp .env.example .env`
 ### Développement (avec Vault local)
 
 ```bash
-make full-up      # Tout en une commande (recommandé)
-# ou
-make dev-up       # Démarre tous les services
+make full-up      # Démarre tout : Vault + backend + frontend (recommandé)
 make vault-shell  # Accès admin à Vault
 ```
 
@@ -87,7 +77,7 @@ cd backend && npm install && npm run dev
 cd frontend && npm install && npm run dev
 ```
 
-## Endpoints (port 4000)
+## Endpoints
 
 | Méthode | Route | Description |
 |---------|-------|-------------|
@@ -100,32 +90,23 @@ cd frontend && npm install && npm run dev
 ## Utilisation
 
 1. Remplir un ou plusieurs champs : SN, code client, IP
-2. Valider : les champs manquants sont complétés depuis la base
+2. Valider : les champs manquants sont complétés depuis la base locale
 3. Le mot de passe s'affiche avec options **copier**, **masquer**, **afficher**
 4. « Régénérer (admin) » : nécessite l'ADMIN_TOKEN pour générer un nouveau mot de passe
 
 ## HashiCorp Vault
 
 **Obligatoire** pour stocker les secrets :
-
-- `PASSWORD_SECRET_KEY` (64 bytes hex)
-- `ADMIN_TOKEN` (32 bytes hex)
+- `PASSWORD_SECRET_KEY` (64 bytes hex) — sel pour la génération des mots de passe
+- `ADMIN_TOKEN` (32 bytes hex) — token pour la régénération admin
 
 Chemin de stockage : `secret/data/sesame` (KV v2)
 
-Voir la documentation complète : [docs/VAULT_SECRETS.md](docs/VAULT_SECRETS.md)
+Documentation complète : [docs/VAULT_SECRETS.md](docs/VAULT_SECRETS.md)
 
 ## Connecteur CRM (optionnel)
 
 Flux : `données partielles → base locale → CRM → import → recalcul`
-
-Configuration (`backend/.env`) :
-
-```ini
-CRM_API_URL=
-CRM_SEARCH_PATH=/search
-CRM_API_KEY=
-```
 
 ## Tests
 

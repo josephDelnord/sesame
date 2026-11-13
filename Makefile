@@ -141,7 +141,7 @@ vault-shell: ## Ouvre un shell admin dans le conteneur Vault (nécessite accès 
 
 dev-up: ## Démarre tous les services en mode développement (Vault + backend + frontend)
 	@echo "🚀 Démarrage en mode DEVELOPPEMENT (avec Vault local)..."
-	@$(COMPOSE) --profile dev,backend,frontend up -d
+	@$(COMPOSE) --profile dev --profile backend --profile frontend up -d
 	$(call WAIT_FOR_VAULT)
 	@echo "✅ Tous les services démarrés :"
 	@echo "   Vault : http://localhost:$(VAULT_PORT)"
@@ -151,7 +151,7 @@ dev-up: ## Démarre tous les services en mode développement (Vault + backend + 
 prod-up: ## Démarre backend + frontend pour production (Vault externe requis)
 	@echo "🚀 Démarrage en mode PRODUCTION (Vault externe requis)..."
 	@echo "   Assurez-vous que VAULT_ADDR pointe vers votre Vault externe."
-	@$(COMPOSE) --profile backend,frontend up -d
+	@$(COMPOSE) --profile backend --profile frontend up -d
 	@echo "✅ Services production démarrés :"
 	@echo "   API : http://localhost:$(BACKEND_PORT)"
 	@echo "   Interface : http://localhost:$(FRONTEND_PORT)"
