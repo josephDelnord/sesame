@@ -66,8 +66,9 @@ docker-up: ## Démarre les conteneurs en arrière-plan (selon DOCKER_PROFILES)
 		echo "Vault : http://localhost:$(VAULT_PORT)"; \
 	fi
 
-docker-down: ## Arrête et supprime les conteneurs
-	$(COMPOSE) down
+docker-down: ## Arrête et supprime les conteneurs (tous les profils)
+	@echo "Arrêt des conteneurs..."
+	$(COMPOSE) --profile dev --profile test --profile backend --profile frontend down --remove-orphans
 
 docker-logs: ## Suit les logs des conteneurs (Ctrl-C pour sortir)
 	$(COMPOSE) --profile $(DOCKER_PROFILES) logs -f
