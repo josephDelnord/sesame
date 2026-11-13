@@ -8,328 +8,325 @@ code client.
 
 ```
 sesame/
-├── Makefile                 # Orchestration Docker (make docker, vault-up, full-up…)
-├── docker-compose.yml       # Services sesame-backend, sesame-frontend
-├── docker-compose.override.yml # Configuration Vault pour le développement
-├── .dockerignore            # Exclusions communes aux builds (contexte racine)
-├── docker/                  # Configuration Docker centralisée
-│   ├── backend/Dockerfile   # Build multi-étapes (tsc → runtime minimal)
+├── .env                         # Variables Docker Compose centralisées
+├── .env.example                 # Template pour .env
+├── Makefile                     # Orchestration (docker, vault, full-up…)
+├── docker-compose.yml           # Services backend + frontend + Vault
+├── .dockerignore                # Exclusions communes aux builds
+├── docker/
+│   ├── backend/Dockerfile       # Build multi-étapes (tsc → runtime minimal)
 │   ├── frontend/
-│   │   ├── Dockerfile       # Build multi-étapes (Vite → nginx)
-│   │   └── nginx.conf       # Sert le build et proxifie /api vers le backend
-│   └── vault/               # Configuration Vault
-│       ├── entrypoint.sh    # Démarrage Vault + initialisation AppRole
-│       └── init-approle.sh  # Création AppRole, politique, stockage du secret
-├── backend/                 # VM 1 — API "CRM" (Node.js + Express + TypeScript)
-│   ├── .env.example         # Configuration documentée (copier en .env)
-│   ├── data/db.json         # Base JSON (montée depuis l'hôte en Docker)
+│   │   ├── Dockerfile           # Build multi-étapes (Vite → nginx)
+│   │   └── nginx.conf           # Proxy /api vers le backend
+│   └── vault/
+│       ├── common.sh            # Fonctions et config partagées
+│       ├── entrypoint.sh        # Démarrage Vault + AppRole
+│       └── init-approle.sh      # Création AppRole, politique, stockage secret
+├── backend/                     # API (Node.js + Express + TypeScript)
+│   ├── .env.example             # Configuration à copier en .env
+│   ├── data/db.json             # Base JSON (montée depuis l'hôte)
 │   └── src/
-│       ├── index.ts         # Point d'entrée : serveur Express + montage des routes
-│       ├── routes/          # Un routeur par domaine (records, resolve, regenerate)
-│       ├── middleware/      # Authentification administrateur
-│       ├── services/        # password (formule), db, crm, seed, vault
-│       │   └── vault.ts     # Intégration HashiCorp Vault (AppRole)
-│       ├── tests/           # Tests de la formule, des versions et du CRM
-│       └── utils/           # Aides partageables (lecture de champs)
-└── frontend/                # VM 2 — Interface utilisateur (React + TypeScript + Vite)
-    ├── index.html           # Polices + application du thème avant rendu
-    ├── .env.example         # VITE_API_URL (vide = même origine)
+│       ├── index.ts             # Point d'entrée Express
+│       ├── routes/              # Routeurs (records, resolve, regenerate)
+│       ├── middleware/          # Authentification admin
+│       ├── services/            # password, db, crm, seed, vault
+│       │   └── vault.ts         # Intégration HashiCorp Vault
+│       ├── tests/               # Tests formule, versions, CRM
+│       └── utils/               # Helpers
+└── frontend/                    # Interface (React + TypeScript + Vite)
+    ├── index.html               # Polices + thème
+    ├── .env.example             # VITE_API_URL
     └── src/
-        ├── App.tsx          # En-tête, assemblage des composants, pied de page
-        ├── main.tsx         # Point d'entrée React
-        ├── services/api.ts  # Client HTTP typé (resolve, regenerate)
+        ├── App.tsx              # Layout principal
+        ├── main.tsx             # Point d'entrée React
+        ├── services/api.ts      # Client HTTP typé
         ├── components/
         │   ├── PasswordForm.tsx
-        │   └── ThemeToggle.tsx  # Bascule clair/sombre + mémorisation
-        └── styles/global.css    # Thème sombre (défaut) et clair en variables CSS
+        │   └── ThemeToggle.tsx   # Thème clair/sombre
+        └── styles/global.css    # Variables CSS des thèmes
 ```
+
+## Configuration
+
+### Fichier `.env` à la racine
+Le projet utilise un **fichier `.env` centralisé** pour les variables Docker Compose.
+
+**Pour commencer** :
+```bash
+cp .env.example .env  # Copiez le template
+# Editez .env selon vos besoins
+```
+
+**Variables disponibles** (`.env.example`) :
+```ini
+# Ports des services
+FRONTEND_PORT=3000
+BACKEND_PORT=4000
+VAULT_PORT=8200
+
+# Adresse Vault (dev : local, prod : externe)
+VAULT_ADDR=http://0.0.0.0:8200
+```
+
+**Personnalisation** : Modifiez ces valeurs avant de lancer `make docker-up`.
+> ⚠️ **Ne versionnez pas** `.env` (il est dans `.gitignore`). Utilisez `.env.example` comme référence.
+
+### Factorisation
+- **docker-compose.yml** : Utilise des [extensions YAML](https://yaml.org/spec/1.2/spec.html#id2765878) (`x-`) pour éviter la duplication de configuration Vault
+- **Scripts Vault** : `common.sh` contient les fonctions réutilisables (attente, génération de tokens, etc.)
+- **Makefile** : Variables centralisées et fonction `VAULT_EXEC` pour les commandes Docker
+
+### Profils Docker Compose
+
+Le projet utilise les **profils** pour séparer les environnements :
+
+| Profil | Services | Usage |
+|--------|----------|-------|
+| `dev` | Vault local | Développement avec Vault en mode dev |
+| `test` | Vault + backend | Tests d'intégration |
+| `backend` | Backend | Toujours activé |
+| `frontend` | Frontend | Toujours activé |
+
+**Commandes selon l'environnement :**
+
+```bash
+# Développement (Vault local + backend + frontend)
+make dev-up
+# ou : DOCKER_PROFILES="dev backend frontend" make docker-up
+
+# Tests d'intégration (Vault + backend pour les tests)
+make docker-test-up
+
+# Production (backend + frontend uniquement, Vault externe)
+make prod-up
+# ou : DOCKER_PROFILES="backend frontend" make docker-up
+
+# Par défaut (utilise tous les profils définis dans DOCKER_PROFILES)
+make docker-up
+```
+
+**Pour production :** Configurez `VAULT_ADDR` dans `.env` pour pointer vers votre Vault externe :
+```ini
+VAULT_ADDR=https://vault.prod.internal:8200
+```
+
+**Pour les tests :** Le profil `test` active Vault et backend pour permettre l'exécution des tests d'intégration.
 
 ## Principe
 
-Le mot de passe est déterministe et recalculable :
+Le mot de passe est **déterministe et recalculable** :
 
-`password = FORMULE( SHA-256( SN :: code_client ) )`
+```
+password = FORMULE(SHA-256(SN :: code_client [:: v<version>]))
+```
 
-- Le hash SHA-256 combine le **numéro de série du routeur** et le **code client**.
-- Le hash est transformé en chaîne texte conforme aux critères prédéfinis
-  (12 caractères, au moins une majuscule, une minuscule, un chiffre et un
-  caractère spécial — donc bien supérieur au minimum de 8 caractères).
-- Le même couple (SN, code client) produit **toujours** le même mot de passe
-  pour une version donnée (voir « Régénération ») : il peut donc être régénéré
-  sur la VM 2 à partir de données partielles (IP seule, code client seul,
-  etc.) via la base de données.
+- SHA-256 combine le **numéro de série** et le **code client**
+- Transformation en chaîne de 12 caractères (min 8) avec : 1 majuscule, 1 minuscule, 1 chiffre, 1 caractère spécial
+- Même couple (SN, code client) → même mot de passe pour une version donnée
+- **Version** : permet la rotation (incrémentation pour régénération admin)
 
 ## Endpoints (backend, port 4000)
 
-| Méthode | Route           | Description                                              |
-|---------|-----------------|---------------------------------------------------------|
-| GET     | /api/health     | Vérification que l'API est en ligne                     |
-| GET     | /api/records    | Liste des enregistrements                                |
-| POST    | /api/records    | Création d'un enregistrement (SN, code client, IP)      |
-| POST    | /api/resolve    | Résout les champs manquants et recalcule le mot de passe |
-| POST    | /api/records/:id/regenerate | Régénération admin : calcule un nouveau mot de passe |
+| Méthode | Route | Description |
+|---------|-------|-------------|
+| GET | `/api/health` | Vérification santé |
+| GET | `/api/records` | Liste des enregistrements |
+| POST | `/api/records` | Création d'un enregistrement |
+| POST | `/api/resolve` | Résolution partielle + recalcul mot de passe |
+| POST | `/api/records/:id/regenerate` | Régénération admin (version +1) |
 
-`POST /api/resolve` accepte n'importe quelle combinaison partielle de
-`{ serialNumber, clientCode, ip }` : la base est interrogée pour retrouver
-l'enregistrement complet, puis le mot de passe est recalculé.
+`POST /api/resolve` accepte `{ serialNumber?, clientCode?, ip? }` :
+- Recherche en base locale → CRM si non trouvé → recalcul
+- Erreurs : `401` (token invalide), `404` (inconnu), `500` (Vault non disponible)
 
-## Régénération d'un mot de passe (admin)
+## Régénération admin
 
-Le mot de passe est déterministe ; recalculer donne donc toujours le même
-résultat. Pour permettre à un administrateur de générer **un autre** mot de
-passe (compromission, rotation périodique…), chaque enregistrement porte un
-numéro de version (`passwordVersion`, 0 = formule d'origine compatible avec
-les mots de passe existants) :
+`POST /api/records/:id/regenerate` avec header `Authorization: Bearer <ADMIN_TOKEN>`
+- Incrémente `passwordVersion` → nouveau mot de passe
+- Toujours recalculable avec (SN, code client, version)
+- **`ADMIN_TOKEN` est stocké dans Vault** à `secret/data/sesame` (avec `password_secret_key`)
 
-```
-password = FORMULE( SHA-256( SN :: code_client [:: v<version>] ) )
-```
+## Connecteur CRM
 
-`POST /api/records/:id/regenerate` (en-tête `Authorization: Bearer
-<ADMIN_TOKEN>`) incrémente la version stockée : le mot de passe suivant est
-différent, mais reste recalculable à partir du même couple (SN, code client)
-et de la version courante. Les réponses d'erreur :
+Flux : `données partielles → base locale → [non trouvé] → CRM → import → recalcul`
 
-- `503` : `ADMIN_TOKEN` non configuré côté serveur (fonctionnalité désactivée) ;
-- `401` : code administrateur invalide ;
-- `404` : identifiant inconnu.
+Configuration (`backend/.env`) :
+- `CRM_API_URL` : URL base (désactive le connecteur si absent)
+- `CRM_SEARCH_PATH` : chemin de recherche (défaut `/search`)
+- `CRM_API_KEY` : clé API (optionnelle)
 
-La variable `ADMIN_TOKEN` est définie dans `backend/.env` (non versionné). Le
-frontend affiche un bouton « Régénérer (admin) » dès qu'un mot de passe est
-affiché, avec saisie du code administrateur.
+Contrat : `POST {CRM_API_URL}{CRM_SEARCH_PATH}` avec `{ serialNumber?, clientCode?, ip? }`
+→ Réponse : `200 + {record: {serialNumber, clientCode, ip}}` ou `404`
 
-## Connecteur CRM de l'entreprise
+## HashiCorp Vault
 
-Si l'enregistrement n'est pas trouvé dans la base locale, le backend peut
-aller chercher les informations (`serialNumber`, `clientCode`, `ip`) dans le
-CRM de l'entreprise, via un connecteur HTTP configurable
-(`backend/src/services/crm.ts`). L'équipement trouvé est importé dans la base locale
-(sans doublon) avant recalcul du mot de passe.
+**Obligatoire** pour stocker le `PASSWORD_SECRET_KEY`.
 
-Flux de `/api/resolve` :
+### Architecture Vault
+- **Vault** : `http://localhost:8200` (dev) / URL personnalisée (prod)
+- **AppRole** : authentification backend (Role ID + Secret ID via fichiers)
+- **Stockage** : KV v2 à `secret/data/sesame` (chemin logique) contenant :
+  - `password_secret_key` : sel pour la génération des mots de passe
+  - `admin_token` : token d'administration pour la régénération
+- **Sécurité** : token root **aléatoire** à chaque démarrage, **jamais affiché dans les commandes Makefile**
 
-```
-données partielles -> base locale -> [non trouvé] -> CRM -> import -> recalcul
-                                     (CRM injoignable -> 502)
-```
+> ℹ️ **Note sur KV v1** : Le script d'init ne stocke **plus** en KV v1. Tous les secrets sont en KV v2 à `secret/data/sesame`.
 
-Configuration (`backend/.env.example`) :
-
-| Variable         | Rôle                                                        |
-|------------------|-------------------------------------------------------------|
-| `CRM_API_URL`    | URL de base du CRM ; si absente, le connecteur est désactivé |
-| `CRM_SEARCH_PATH`| Chemin de recherche (par défaut `/search`)                   |
-| `CRM_API_KEY`    | Clé d'API envoyée en `Authorization: Bearer ...` (optionnel) |
-
-Contrat attendu du CRM : `POST {CRM_API_URL}{CRM_SEARCH_PATH}` reçoit
-`{ serialNumber?, clientCode?, ip? }` et répond:
-
-- `200` + `{ "record": { "serialNumber", "clientCode", "ip" } }` si trouvé ;
-- `200` + `{ "record": null }` ou `404` si aucun équipement ne correspond.
-
-Si les deux chemins échouent, la réponse est `404` ; si le CRM renvoie une
-erreur ou est injoignable, la réponse est `502`.
-
-## Démarrage
-
-Le Makefile orchestrer Docker et Vault. Les commandes npm de développement
-restent utilisables directement dans `backend/` et `frontend/`.
-
-### Docker + Vault (recommandé)
+### Démarrage
 
 ```bash
-# Démarrage complet (Vault + backend + frontend)
+# Développement : tout en une commande (Vault local + backend + frontend)
 make full-up
 
-# Ou étape par étape
-make vault-up       # Démarre Vault uniquement
-make vault-secrets  # Génère et stocke le PASSWORD_SECRET_KEY dans Vault
-make docker-up      # Démarre backend + frontend
+# Développement : étape par étape
+make vault-up       # Démarre Vault local + AppRole
+make vault-secrets  # Génère et stocke PASSWORD_SECRET_KEY
+make dev-up         # Démarre backend + frontend (avec Vault)
 
-# Autres commandes
-make docker         # construit les images puis démarre les conteneurs
-make docker-logs    # suit les logs (Ctrl-C pour sortir)
-make docker-down    # arrête les conteneurs
-make vault-down     # arrête Vault
+# Production : backend + frontend uniquement (Vault externe requis)
+make prod-up
 ```
 
-Une fois démarré : interface sur `http://localhost:3000`, API sur
-`http://localhost:4000` (testable avec `curl localhost:4000/api/health`).
+> ⚠️ **Vault est obligatoire** : en développement, utilisez `make dev-up` ou `make full-up`. En production, configurez `VAULT_ADDR` vers votre Vault externe avant `make prod-up`.
 
-- `docker-compose.yml` : services `sesame-backend`, `sesame-frontend`
-- `docker-compose.override.yml` : service `vault` pour le développement
-- La configuration (`ADMIN_TOKEN`, `CRM_*`) est lue depuis `backend/.env` via
-  `env_file` — jamais copiée dans l'image.
-- La base `backend/data/db.json` est montée depuis la machine hôte :
-  supprimez le fichier (ou `rm backend/data/db.json`) pour réinitialiser
-  la base, qui se ré-amorce au redémarrage du conteneur.
-- Ports personnalisés : `FRONTEND_PORT=8080 BACKEND_PORT=14000 make docker-up`.
-- Port déjà occupé hors Docker : `make kill-port PORT=<numéro>`.
+### Commandes Makefile
 
-> ⚠️ **Vault est obligatoire** : le `PASSWORD_SECRET_KEY` n'est plus stocké dans
-> les fichiers de configuration mais dans Vault. Sans Vault, l'application
-> ne démarrera pas.
+| Commande | Description |
+|----------|-------------|
+| `make docker` | Construit les images + démarre les conteneurs |
+| `make docker-up` | Démarre backend + frontend |
+| `make docker-down` | Arrête les conteneurs |
+| `make docker-logs` | Suit les logs |
+| `make vault-up` | Démarre Vault + AppRole |
+| `make vault-down` | Arrête Vault |
+| `make vault-secrets` | Régénère le PASSWORD_SECRET_KEY |
+| `make vault-shell` | **Shell admin** (nécessite accès Docker) |
+| `make full-up` | Démarre tout en une commande |
+| `make kill-port PORT=N` | Libère un port occupé |
 
-### Développement local (sans Docker)
+### Accès à Vault
 
+| Accès | URL | Authentification |
+|-------|-----|------------------|
+| **Interface Sésame** | `http://localhost:3000` | - |
+| **API Sésame** | `http://localhost:4000` | - |
+| **UI Vault** | `http://localhost:8200` | Token root via `docker exec sesame-vault-1 cat /vault/secrets/vault_root_token` |
+| **Shell Vault** | - | `make vault-shell` (nécessite accès Docker) |
+
+Exemples dans le shell Vault :
 ```bash
-# Backend (VM 1) — http://localhost:4000
-cd backend && npm install && npm run dev
-
-# Frontend (VM 2) — http://localhost:3000
-cd frontend && npm install && npm run dev
-```
-
-Au premier lancement, copier puis adapter la configuration locale
-(fichiers non versionnés) :
-
-```bash
-cp backend/.env.example backend/.env
-```
-
-Le serveur de développement Vite proxifie `/api` vers `http://localhost:4000`.
-Pour une autre machine : adapter `VITE_API_URL` dans `frontend/.env`
-(voir `frontend/.env.example`).
-
-Les conteneurs Docker et les serveurs de dev utilisent les mêmes ports
-(4000/3000) et la même base : lancez l'un **ou** l'autre.
-
-### Utilisation
-
-1. Remplir un ou plusieurs champs : SN, code client, IP.
-2. Valider : les champs manquants sont complétés depuis la base.
-3. Le mot de passe recalculé s'affiche, avec options **copier**,
-   **masquer** et **afficher**.
-4. « Régénérer (admin) » : après saisie du code administrateur, un nouveau
-   mot de passe est calculé (version +1) et affiché en remplacement.
-
-### Interface
-
-L'interface (thème « Sésame, ouvre-toi ») propose un mode sombre (par
-défaut) et un mode clair, basculables via le bouton soleil/lune de
-l'en-tête. Le choix est mémorisé dans le navigateur (`localStorage`) et
-le thème initial suit la préférence du système (`prefers-color-scheme`).
-
-## HashiCorp Vault (stockage sécurisé des secrets)
-
-Sésame utilise **HashiCorp Vault** en environnement de développement pour
-stocker le `PASSWORD_SECRET_KEY` de manière sécurisée. Vault est **obligatoire**
-et remplace le stockage du secret dans les fichiers de configuration.
-
-### Architecture
-
-- **Vault** (`http://localhost:8200`) : stocke le `PASSWORD_SECRET_KEY`
-- **AppRole** : authentification sécurisée du backend (Role ID + Secret ID)
-- **KV v2** : le secret est stocké en Key-Value version 2 à
-  `secret/data/data/sesame`
-
-### Prérequis
-
-- Docker et Docker Compose installés
-- Port `8200` disponible sur `localhost`
-
-### Démarrage complet avec Vault
-
-```bash
-# Démarre Vault + initialise AppRole + stocke le secret + backend + frontend
-make full-up
-
-# Ou étape par étape
-make vault-up      # Démarre Vault
-make vault-secrets # Génère et stocke le PASSWORD_SECRET_KEY
-make docker-up     # Démarre backend + frontend
-```
-
-### Commandes Vault disponibles
-
-| Commande | Description | Accès |
-|----------|-------------|-------|
-| `make vault-up` | Démarre Vault et initialise AppRole | ✅ Public |
-| `make vault-down` | Arrête Vault | ✅ Public |
-| `make vault-init` | `vault-up` + `vault-secrets` | ✅ Public |
-| `make vault-secrets` | Régénère le PASSWORD_SECRET_KEY | ✅ Public |
-| `make full-up` | Démarre tout en une commande | ✅ Public |
-| `make vault-shell` | **Shell admin** dans le conteneur Vault | 🔒 Nécessite accès Docker |
-
-### Accès à l'interface web de Vault
-
-1. **URL** : `http://localhost:8200`
-2. **Token root** : généré aléatoirement à chaque démarrage
-   - Récupérez-le avec :
-     ```bash
-     docker exec sesame-vault-1 cat /vault/secrets/vault_root_token
-     ```
-
-### Accès admin via shell
-
-```bash
-make vault-shell
-```
-
-Cette commande ouvre un shell dans le conteneur Vault avec :
-- `VAULT_ADDR=http://0.0.0.0:8200`
-- `VAULT_TOKEN` configuré avec le token root
-
-Exemples dans le shell :
-```bash
-# Lister les secrets KV v2
 vault kv list secret/data/
-
-# Récupérer le PASSWORD_SECRET_KEY
 vault kv get secret/data/sesame
-
-# Vérifier l'état de Vault
 vault status
 ```
 
-> ⚠️ **Sécurité** :
-> - Le token root **n'est jamais affiché** dans le terminal par les commandes Makefile
-> - L'accès via `make vault-shell` nécessite un **accès Docker** sur la machine
-> - Le backend utilise **AppRole** (pas le token root) pour accéder aux secrets
-> - En production : désactivez le token root et utilisez uniquement AppRole
+### Sécurité
+- Le token root **n'est jamais affiché** dans le terminal par les commandes Makefile
+- L'accès admin (`vault-shell`) nécessite **accès Docker** sur la machine
+- Le backend utilise **AppRole** (pas le token root)
+- En production : désactivez le token root, utilisez uniquement AppRole
 
-### Configuration pour la production
+### Configuration production
 
-En production, configurez Vault avec :
-- **AppRole uniquement** (pas de token root)
-- **Montage du volume** pour les fichiers Role ID/Secret ID
-- **Réseau sécurisé** (HTTPS, pas d'exposition publique de Vault)
-
-Exemple de configuration backend (.env) :
-```
+```ini
+# backend/.env
 VAULT_ADDR=https://vault.prod.internal:8200
 VAULT_ROLE_ID_FILE=/run/secrets/vault_role_id
 VAULT_SECRET_ID_FILE=/run/secrets/vault_secret_id
 ```
 
-### Intégration continue (CI)
+## Développement local
 
-Pour les tests CI sans Vault :
-- Utilisez `backend/src/tests/password.test.ts` qui contourne Vault
-- Ou configurez un Vault éphémère dans votre pipeline
+### Avec Docker (recommandé)
+```bash
+# Démarrage complet (Vault local + backend + frontend)
+make full-up
+
+# Ou démarrer séparément
+make dev-up  # Démarre tous les services (dev)
+```
+
+- Configuration lue depuis `.env` (variables Docker Compose) et `backend/.env`
+- Base `backend/data/db.json` montée depuis l'hôte
+- Ports personnalisables : `FRONTEND_PORT=8080 BACKEND_PORT=14000 make docker-up`
+- Port occupé ? : `make kill-port PORT=N`
+
+> ℹ️ **Note** : `make full-up` = `make vault-init` + `make dev-up`
+
+### Sans Docker
+```bash
+# Backend — http://localhost:4000
+cd backend && npm install && npm run dev
+
+# Frontend — http://localhost:3000
+cd frontend && npm install && npm run dev
+```
+
+Configuration :
+```bash
+cp backend/.env.example backend/.env
+```
+
+> ⚠️ **Important** : en mode dev sans Docker, Vault n'est pas disponible.
+
+## Utilisation
+
+1. Remplir un ou plusieurs champs : SN, code client, IP
+2. Valider : les champs manquants sont complétés depuis la base
+3. Le mot de passe s'affiche avec options **copier**, **masquer**, **afficher**
+4. « Régénérer (admin) » : après saisie du code admin, nouveau mot de passe généré
+
+## Interface
+
+Thème « Sésame, ouvre-toi » avec bascule clair/sombre.
+- Choix mémorisé dans `localStorage`
+- Thème initial selon `prefers-color-scheme` du système
 
 ## Tests
 
+### Tests unitaires
 ```bash
+# Exécuter les tests unitaires (sans dépendance externe)
 cd backend && npm test
+
+# Ou via Makefile
+make test-backend
 ```
 
-Vérifie le déterminisme du mot de passe, le respect des critères,
-l'unicité par SN / code client, la compatibilité des versions et le
-connecteur CRM.
+Vérifie : déterminisme, critères, unicité, compatibilité versions, connecteur CRM.
+
+### Tests d'intégration
+
+Les tests d'intégration vérifient la connexion avec **HashiCorp Vault** :
+- Connexion au serveur Vault
+- Récupération du `PASSWORD_SECRET_KEY` via AppRole
+- Validation de la configuration Vault
+
+```bash
+# Démarrer les services pour les tests (Vault + backend)
+make docker-test-up
+
+# Exécuter les tests d'intégration
+make test-integration
+
+# Tout en une commande
+make test-all
+
+# Arrêter les services de test
+make docker-test-down
+```
+
+> ⚠️ **Prérequis** : Les tests d'intégration nécessitent Docker et le profil `test` activé.
+
+**Fichiers de test :**
+- `backend/tests/password.test.ts` — Tests unitaires (sans Vault)
+- `backend/tests/crm.test.ts` — Tests unitaires CRM
+- `backend/tests/integration/vault.test.ts` — Tests d'intégration Vault ⭐ NOUVEAU
 
 ## Notes
 
-- La persistance utilise un stockage JSON simple (`backend/data/db.json`),
-  isolé derrière le module `db.ts` : il peut être remplacé par SQLite ou
-  PostgreSQL sans toucher au reste du code.
-- Les mots de passe ne sont pas stockés en base : ils sont toujours
-  recalculés à partir du SN, du code client et de la version courante.
-- Les fichiers `backend/.env` et `frontend/.env` ne sont pas versionnés
-  (seuls `.env.example` le sont) et aucun secret n'entre dans les images
-  Docker.
-- En Docker, le frontend conteneurisé appelle l'API en même origine via le
-  proxy nginx ; en développement, c'est le proxy Vite qui joue ce rôle.
-- **Vault** : en développement, un conteneur Vault est démarré automatiquement
-  avec AppRole. En production, configurez votre propre instance Vault avec
-  la politique `sesame-backend` (voir section HashiCorp Vault).
+- Persistance : stockage JSON (`backend/data/db.json`) via `db.ts` → remplaçable par SQLite/PostgreSQL
+- Les mots de passe **ne sont pas stockés** : toujours recalculés à partir de (SN, code client, version)
+- Fichiers `.env` **non versionnés** (seuls `.env.example` le sont)
+- En Docker : frontend → API via proxy nginx ; en dev : via proxy Vite
+- Vault : conteneur démarré automatiquement avec Docker Compose

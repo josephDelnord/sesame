@@ -1,7 +1,56 @@
 name: sesame
 
+# --- Extensions réutilisables ---
+# Configuration Vault commune à tous les services qui en ont besoin
+x-vault-env: &vault-env
+  VAULT_ADDR: ${VAULT_ADDR:-http://vault:8200}
+  VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:${VAULT_PORT:-8200}
+
+# Volumes Vault partagés
+x-vault-volumes: &vault-volumes
+  - vault_dev_data:/vault/file
+  - vault_secrets:/vault/secrets
+
+# --- Services ---
+
 services:
+  # Vault — Stockage sécurisé des secrets (HashiCorp Vault)
+  # 
+  # PROFILS :
+  #   - "dev" : Vault local en mode dev (token root, pour développement)
+  #   - "test" : Vault pour les tests d'intégration
+  #   - Par défaut : désactivé (pour production avec Vault externe)
+  #
+  # Usage développement : docker compose --profile dev up
+  # Usage tests : docker compose --profile test up
+  # Usage production : docker compose up (Vault externe via VAULT_ADDR)
+  vault:
+    profiles: ["dev", "test"]
+    image: hashicorp/vault:1.16
+    hostname: vault
+    ports:
+      - "${VAULT_PORT:-8200}:${VAULT_PORT:-8200}"
+    environment:
+      <<: *vault-env
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /vault/secrets/initialized && vault status -address=${VAULT_ADDR:-http://127.0.0.1:8200} || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    volumes:
+      - vault_dev_data:/vault/file
+      - vault_secrets:/vault/secrets
+      - ./docker/vault:/docker-entrypoint-init.d:ro
+    entrypoint: /docker-entrypoint-init.d/entrypoint.sh
+
   # VM 1 — API "CRM" : génération et recalcul des mots de passe
+  # Utilise Vault pour récupérer le PASSWORD_SECRET_KEY via AppRole
+  # 
+  # Configuration Vault :
+  #   - En dev : utilise le service vault (profil dev)
+  #   - En test : utilise le service vault (profil test)
+  #   - En prod : utilise VAULT_ADDR pour pointer vers un Vault externe
   backend:
     build:
       context: .
@@ -9,17 +58,29 @@ services:
     container_name: sesame-backend
     ports:
       - "${BACKEND_PORT:-4000}:4000"
+    environment:
+      <<: *vault-env
+      VAULT_ROLE_ID_FILE: /vault/secrets/vault_role_id
+      VAULT_SECRET_ID_FILE: /vault/secrets/vault_secret_id
+      PORT: 4000
+      NODE_ENV: ${NODE_ENV:-production}
     # Configuration : reprend backend/.env s'il existe (ADMIN_TOKEN, CRM_*),
     # sinon les valeurs d'environnement du shell. Jamais dans l'image.
     env_file:
       - path: ./backend/.env
         required: false
-    environment:
-      - PORT=4000
     volumes:
       # La base JSON reste sur la machine hôte, partagée avec le mode dev.
       - ./backend/data:/app/data
+      # Secrets Vault partagés avec le conteneur vault (uniquement en dev/test)
+      - vault_secrets:/vault/secrets:ro
+    depends_on:
+      vault:
+        condition: service_healthy
     restart: unless-stopped
+    # En production : backend peut démarrer sans vault local
+    # (Vault externe via VAULT_ADDR, sans dépendre du service vault)
+    profiles: ["backend", "test"]
 
   # VM 2 — Interface React compilée, servie par nginx (proxifie /api -> backend)
   frontend:
@@ -28,10 +89,38 @@ services:
       dockerfile: docker/frontend/Dockerfile
       args:
         # Laisser vide pour la même origine ; ex. http://serveur:4000 sinon.
-        - VITE_API_URL=
+        VITE_API_URL: ""
     container_name: sesame-frontend
     ports:
       - "${FRONTEND_PORT:-3000}:80"
     depends_on:
       - backend
     restart: unless-stopped
+    profiles: ["frontend"]
+
+  # Service de test d'intégration
+  # Exécute les tests qui nécessitent Vault
+  test:
+    profiles: ["test"]
+    image: node:22-alpine
+    container_name: sesame-test
+    working_dir: /app
+    environment:
+      <<: *vault-env
+      VAULT_TOKEN: "${VAULT_ROOT_TOKEN:-root}"
+      VAULT_ROLE_ID_FILE: /vault/secrets/vault_role_id
+      VAULT_SECRET_ID_FILE: /vault/secrets/vault_secret_id
+      NODE_ENV: test
+    volumes:
+      - vault_secrets:/vault/secrets:ro
+      - ./backend:/app:ro
+      - /app/node_modules
+    depends_on:
+      vault:
+        condition: service_healthy
+    command: sh -c "apk add --no-cache git && npm install && npm run test:integration"
+
+# --- Volumes ---
+volumes:
+  vault_dev_data:
+  vault_secrets:

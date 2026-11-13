@@ -126,6 +126,48 @@ export async function getPasswordSecretKey(): Promise<string> {
 }
 
 /**
+ * Récupère l'ADMIN_TOKEN depuis Vault.
+ * Utilise AppRole pour l'authentification.
+ * 
+ * @throws Error si Vault n'est pas configuré ou si le token est introuvable
+ */
+export async function getAdminToken(): Promise<string> {
+  const vault = await getVaultClient();
+
+  if (!vault) {
+    throw new Error(
+      'Vault est OBLIGATOIRE. Configurez VAULT_ADDR et soit : ' +
+      '(1) VAULT_ROLE_ID_FILE + VAULT_SECRET_ID_FILE pour AppRole, ' +
+      '(2) VAULT_TOKEN pour l\'authentification directe.'
+    );
+  }
+
+  try {
+    // KV v2 : chemin physique = secret/data/data/sesame
+    const result = await vault.read('secret/data/data/sesame');
+    
+    // Structure KV v2 : { data: { data: { admin_token: "..." } } }
+    const v2Data = result?.data as { data?: Record<string, unknown> } | undefined;
+    if (v2Data?.data && typeof v2Data.data.admin_token === 'string') {
+      const token = v2Data.data.admin_token as string;
+      if (token.length >= 16) {
+        return token;
+      }
+      throw new Error('ADMIN_TOKEN dans Vault est trop court (min 16 caractères)');
+    }
+    
+    throw new Error(
+      'ADMIN_TOKEN introuvable dans Vault. ' +
+      'Vérifiez que le secret existe à secret/data/data/sesame.'
+    );
+  } catch (error) {
+    throw new Error(
+      `Impossible de récupérer ADMIN_TOKEN depuis Vault : ${(error as Error).message}`
+    );
+  }
+}
+
+/**
  * Vérifie si Vault est configuré et accessible.
  */
 export function isVaultConfigured(): boolean {

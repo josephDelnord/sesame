@@ -12,13 +12,9 @@ export const regenerateRouter = Router();
 regenerateRouter.post(
   '/api/records/:id/regenerate',
   async (req: Request, res: Response) => {
-    if (!process.env.ADMIN_TOKEN?.trim()) {
-      res.status(503).json({
-        error: 'Régénération désactivée : configurez ADMIN_TOKEN côté serveur.',
-      });
-      return;
-    }
-    if (!isAdmin(req)) {
+    // Vérification asynchrone de l'admin (ADMIN_TOKEN vient de Vault)
+    const isAdminUser = await isAdmin(req);
+    if (!isAdminUser) {
       res.status(401).json({ error: 'Code administrateur invalide.' });
       return;
     }

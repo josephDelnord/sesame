@@ -1,33 +1,14 @@
 #!/bin/sh
 # Script d'initialisation Vault avec AppRole pour le développement
+# Source : common.sh pour les fonctions partagées
 
 set -e
 
-echo "⏳ Attente que Vault soit prêt..."
+# Charger la configuration commune
+source /docker-entrypoint-init.d/common.sh
 
-# Exporter les variables pour vault CLI
-VAULT_ADDR="http://0.0.0.0:8200"
-export VAULT_ADDR
-
-# Lire le token root depuis le fichier
-if [ -f /vault/secrets/vault_root_token ]; then
-  VAULT_TOKEN=$(cat /vault/secrets/vault_root_token)
-  export VAULT_TOKEN
-fi
-
-# Attendre que Vault réponde
-TRY=0
-MAX_TRY=30
-while ! vault status > /dev/null 2>&1; do
-  TRY=$((TRY + 1))
-  if [ $TRY -ge $MAX_TRY ]; then
-    echo "❌ Vault n'a pas démarré après $MAX_TRY secondes"
-    exit 1
-  fi
-  sleep 1
-done
-
-echo "✅ Vault est démarré"
+# Attendre que Vault réponde (utilise la fonction commune)
+wait_for_vault || exit 1
 
 # Activer AppRole
 if ! vault auth list | grep -q approle; then
@@ -59,23 +40,30 @@ if ! vault list auth/approle/role | grep -q sesame-backend; then
 fi
 
 # Récupérer Role ID et Secret ID
-ROLE_ID=$(vault read -field=role_id auth/approle/role/sesame-backend/role-id)
-SECRET_ID=$(vault write -f -field=secret_id auth/approle/role/sesame-backend/secret-id)
-
-# Stocker Role ID et Secret ID dans des fichiers
 mkdir -p /vault/secrets
-echo "$ROLE_ID" > /vault/secrets/vault_role_id
-echo "$SECRET_ID" > /vault/secrets/vault_secret_id
+vault read -field=role_id auth/approle/role/sesame-backend/role-id > /vault/secrets/vault_role_id
+vault write -f -field=secret_id auth/approle/role/sesame-backend/secret-id > /vault/secrets/vault_secret_id
 
-# Générer et stocker le PASSWORD_SECRET_KEY dans Vault (KV v2 uniquement)
-echo "📦 Génération et stockage du secret dans Vault..."
-PASSWORD_SECRET=$(vault write -format=json sys/tools/random bytes=64 format=hex 2>/dev/null | sed -n 's/.*"random_bytes": "\([^"]*\).*/\1/p')
-vault kv put secret/data/sesame password_secret_key="$PASSWORD_SECRET"
+# Générer et stocker les secrets dans Vault (KV v2)
+echo "📦 Génération et stockage des secrets dans Vault..."
+
+# Générer les deux secrets
+PASSWORD_SECRET=$(generate_hex_secret 64)
+ADMIN_TOKEN=$(generate_hex_secret 32)
+
+# Stocker les deux clés en une seule commande pour éviter d'écraser
+/bin/vault kv put secret/data/sesame \
+  password_secret_key="$PASSWORD_SECRET" \
+  admin_token="$ADMIN_TOKEN"
 
 echo "✅ Vault initialisé avec AppRole!"
-echo "   Role ID: $ROLE_ID"
-echo "   Secret ID: $SECRET_ID"
+echo "   Role ID: $(cat /vault/secrets/vault_role_id)"
+echo "   Secret ID: $(cat /vault/secrets/vault_secret_id)"
 echo "   PASSWORD_SECRET_KEY généré et stocké dans Vault"
+echo "   ADMIN_TOKEN généré et stocké dans Vault"
+
+# Créer un fichier de verrouillage pour indiquer que l'initialisation est terminée
+touch /vault/secrets/initialized
 
 # Garder le conteneur en vie
 sleep infinity
