@@ -74,7 +74,7 @@ echo "$SECRET_ID" > /vault/secrets/vault_secret_id
 
 # Générer et stocker le PASSWORD_SECRET_KEY dans Vault (64 bytes hex = 128 caractères)
 echo "📦 Génération et stockage du secret dans Vault..."
-PASSWORD_SECRET=$(vault read -field=random_hex sys/tools/random/64)
+PASSWORD_SECRET=$(vault write -format=json sys/tools/random bytes=64 format=hex 2>/dev/null | sed -n 's/.*"random_bytes": "\([^"]*\).*/\1/p')
 vault kv put secret/data/sesame password_secret_key="$PASSWORD_SECRET"
 
 # Stocker aussi en KV v1 pour compatibilité

@@ -79,7 +79,7 @@ vault-up: ## Démarre Vault pour le développement (avec AppRole auto-configuré
 
 vault-secrets: ## Génère et stocke un PASSWORD_SECRET_KEY aléatoire dans Vault (dev)
 	@echo "Génération et stockage du secret dans Vault..."
-	@docker exec sesame-vault-1 sh -c 'export VAULT_ADDR=http://0.0.0.0:8200; export VAULT_TOKEN=root; SECRET=$$(vault read -field=random_hex sys/tools/random/64); /bin/vault kv put secret/data/sesame password_secret_key="$$SECRET" && echo "✅ Secret généré et stocké dans Vault!"'
+	@docker exec sesame-vault-1 sh -c 'export VAULT_ADDR=http://0.0.0.0:8200; export VAULT_TOKEN=root; SECRET=$$(vault write -format=json sys/tools/random bytes=64 format=hex 2>/dev/null | sed -n "s/.*\"random_bytes\": \"\([^\"]*\).*/\1/p"); /bin/vault kv put secret/data/sesame password_secret_key="$$SECRET" && echo "✅ Secret généré et stocké dans Vault!"'
 
 vault-init: vault-up vault-secrets ## Démarre Vault et stocke le secret via AppRole
 
