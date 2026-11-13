@@ -8,14 +8,18 @@ code client.
 
 ```
 sesame/
-├── Makefile                 # Orchestration Docker (make docker, kill-port…)
-├── docker-compose.yml       # Services sesame-backend et sesame-frontend
+├── Makefile                 # Orchestration Docker (make docker, vault-up, full-up…)
+├── docker-compose.yml       # Services sesame-backend, sesame-frontend
+├── docker-compose.override.yml # Configuration Vault pour le développement
 ├── .dockerignore            # Exclusions communes aux builds (contexte racine)
 ├── docker/                  # Configuration Docker centralisée
 │   ├── backend/Dockerfile   # Build multi-étapes (tsc → runtime minimal)
-│   └── frontend/
-│       ├── Dockerfile       # Build multi-étapes (Vite → nginx)
-│       └── nginx.conf       # Sert le build et proxifie /api vers le backend
+│   ├── frontend/
+│   │   ├── Dockerfile       # Build multi-étapes (Vite → nginx)
+│   │   └── nginx.conf       # Sert le build et proxifie /api vers le backend
+│   └── vault/               # Configuration Vault
+│       ├── entrypoint.sh    # Démarrage Vault + initialisation AppRole
+│       └── init-approle.sh  # Création AppRole, politique, stockage du secret
 ├── backend/                 # VM 1 — API "CRM" (Node.js + Express + TypeScript)
 │   ├── .env.example         # Configuration documentée (copier en .env)
 │   ├── data/db.json         # Base JSON (montée depuis l'hôte en Docker)
@@ -23,7 +27,8 @@ sesame/
 │       ├── index.ts         # Point d'entrée : serveur Express + montage des routes
 │       ├── routes/          # Un routeur par domaine (records, resolve, regenerate)
 │       ├── middleware/      # Authentification administrateur
-│       ├── services/        # password (formule), db, crm, seed
+│       ├── services/        # password (formule), db, crm, seed, vault
+│       │   └── vault.ts     # Intégration HashiCorp Vault (AppRole)
 │       ├── tests/           # Tests de la formule, des versions et du CRM
 │       └── utils/           # Aides partageables (lecture de champs)
 └── frontend/                # VM 2 — Interface utilisateur (React + TypeScript + Vite)
@@ -127,21 +132,32 @@ erreur ou est injoignable, la réponse est `502`.
 
 ## Démarrage
 
-Le Makefile orchestre uniquement Docker. Les commandes npm de développement
+Le Makefile orchestrer Docker et Vault. Les commandes npm de développement
 restent utilisables directement dans `backend/` et `frontend/`.
 
-### Docker (recommandé)
+### Docker + Vault (recommandé)
 
 ```bash
-make docker        # construit les images puis démarre les conteneurs
-make docker-logs   # suit les logs (Ctrl-C pour sortir)
-make docker-down   # arrête les conteneurs
+# Démarrage complet (Vault + backend + frontend)
+make full-up
+
+# Ou étape par étape
+make vault-up       # Démarre Vault uniquement
+make vault-secrets  # Génère et stocke le PASSWORD_SECRET_KEY dans Vault
+make docker-up      # Démarre backend + frontend
+
+# Autres commandes
+make docker         # construit les images puis démarre les conteneurs
+make docker-logs    # suit les logs (Ctrl-C pour sortir)
+make docker-down    # arrête les conteneurs
+make vault-down     # arrête Vault
 ```
 
 Une fois démarré : interface sur `http://localhost:3000`, API sur
 `http://localhost:4000` (testable avec `curl localhost:4000/api/health`).
 
-- `docker-compose.yml` : deux services (`sesame-backend`, `sesame-frontend`).
+- `docker-compose.yml` : services `sesame-backend`, `sesame-frontend`
+- `docker-compose.override.yml` : service `vault` pour le développement
 - La configuration (`ADMIN_TOKEN`, `CRM_*`) est lue depuis `backend/.env` via
   `env_file` — jamais copiée dans l'image.
 - La base `backend/data/db.json` est montée depuis la machine hôte :
@@ -149,6 +165,10 @@ Une fois démarré : interface sur `http://localhost:3000`, API sur
   la base, qui se ré-amorce au redémarrage du conteneur.
 - Ports personnalisés : `FRONTEND_PORT=8080 BACKEND_PORT=14000 make docker-up`.
 - Port déjà occupé hors Docker : `make kill-port PORT=<numéro>`.
+
+> ⚠️ **Vault est obligatoire** : le `PASSWORD_SECRET_KEY` n'est plus stocké dans
+> les fichiers de configuration mais dans Vault. Sans Vault, l'application
+> ne démarrera pas.
 
 ### Développement local (sans Docker)
 
@@ -310,3 +330,6 @@ connecteur CRM.
   Docker.
 - En Docker, le frontend conteneurisé appelle l'API en même origine via le
   proxy nginx ; en développement, c'est le proxy Vite qui joue ce rôle.
+- **Vault** : en développement, un conteneur Vault est démarré automatiquement
+  avec AppRole. En production, configurez votre propre instance Vault avec
+  la politique `sesame-backend` (voir section HashiCorp Vault).
