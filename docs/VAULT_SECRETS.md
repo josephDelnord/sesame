@@ -2,13 +2,22 @@
 
 ## Accès rapide aux secrets
 
+### Avec shell interactif
 ```bash
 make vault-shell
 vault kv get secret/data/sesame
+```
 
-# Ou pour un secret spécifique
-vault kv get -field=password_secret_key secret/data/sesame
-vault kv get -field=admin_token secret/data/sesame
+### Sans shell (en une commande)
+```bash
+# Récupérer PASSWORD_SECRET_KEY
+docker exec sesame-vault-1 sh -c 'export VAULT_ADDR=http://0.0.0.0:8200; export VAULT_TOKEN=$(cat /vault/secrets/vault_root_token); vault kv get -field=password_secret_key secret/data/sesame'
+
+# Récupérer ADMIN_TOKEN
+docker exec sesame-vault-1 sh -c 'export VAULT_ADDR=http://0.0.0.0:8200; export VAULT_TOKEN=$(cat /vault/secrets/vault_root_token); vault kv get -field=admin_token secret/data/sesame'
+
+# Récupérer tous les secrets
+docker exec sesame-vault-1 sh -c 'export VAULT_ADDR=http://0.0.0.0:8200; export VAULT_TOKEN=$(cat /vault/secrets/vault_root_token); vault kv get secret/data/sesame'
 ```
 
 ---
