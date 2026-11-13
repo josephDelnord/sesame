@@ -108,28 +108,41 @@ erreur ou est injoignable, la réponse est `502`.
 
 ## Démarrage
 
-### Backend (VM 1)
+Toutes les commandes s'exécutent depuis la racine du projet via le
+`Makefile` (`make` seul affiche l'aide) :
 
 ```bash
-cd backend
-npm install
-npm run dev     # http://localhost:4000
+make install      # dépendances backend + frontend
+make dev          # backend (VM 1, port 4000) + frontend (VM 2, port 5173)
+```
+
+Démarrage séparé si les VM sont distinctes :
+
+```bash
+make dev-backend    # uniquement l'API   — http://localhost:4000
+make dev-frontend   # uniquement l'UI    — http://localhost:5173
+```
+
+Au premier lancement, copier puis adapter la configuration locale
+(fichiers non versionnés) :
+
+```bash
+cp backend/.env.example backend/.env
 ```
 
 La base est initialisée et alimentée automatiquement au démarrage
-(voir `src/seed.ts`) — équivalent du back-end CRM qui génère les mots
-de passe à la création des clients.
-
-### Frontend (VM 2)
-
-```bash
-cd frontend
-npm install
-npm run dev     # http://localhost:5173
-```
+(`make seed` la réinitialise) — équivalent du back-end CRM qui génère
+les mots de passe à la création des clients.
 
 Le serveur de développement Vite proxifie `/api` vers `http://localhost:4000`.
-Pour une autre machine : adapter `VITE_API_URL` dans `frontend/.env`.
+Pour une autre machine : adapter `VITE_API_URL` dans `frontend/.env`
+(voir `frontend/.env.example`).
+
+### Production
+
+```bash
+make serve    # compile (make build) puis démarre l'API compilée (port 4000)
+```
 
 ### Utilisation
 
@@ -143,11 +156,12 @@ Pour une autre machine : adapter `VITE_API_URL` dans `frontend/.env`.
 ## Tests
 
 ```bash
-cd backend && npm test
+make test
 ```
 
-Vérifie le déterminisme du mot de passe, le respect des critères et
-l'unicité par SN / code client.
+Vérifie le déterminisme du mot de passe, le respect des critères,
+l'unicité par SN / code client, la compatibilité des versions et le
+connecteur CRM.
 
 ## Notes
 
