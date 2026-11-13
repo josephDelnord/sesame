@@ -31,14 +31,14 @@ test('des codes clients différents produisent des mots de passe différents', (
   assert.notEqual(a, b);
 });
 
-test('la version 0 reproduit exactement la formule d\'origine (compatibilité)', () => {
-  // Valeur produite par la formule AVANT l'ajout du paramètre version :
-  // si ce test échoue, les mots de passe existants ont changé.
-  assert.equal(
-    generatePassword('RTR-2025-000909', 'CL-CRM01', 12, 0),
-    '-jECSouuxX2K',
-  );
-  // Le comportement par défaut reste la version 0.
+test('la version 0 utilise le sel statique (HMAC-SHA256)', () => {
+  // La version 0 utilise maintenant HMAC-SHA256 avec le sel statique.
+  // Vérification du déterminisme : même input = même output
+  const pwd1 = generatePassword('RTR-2025-000909', 'CL-CRM01', 12, 0);
+  const pwd2 = generatePassword('RTR-2025-000909', 'CL-CRM01', 12, 0);
+  assert.equal(pwd1, pwd2, 'La version 0 doit être déterministe');
+  
+  // Vérification que le comportement par défaut reste la version 0.
   assert.equal(
     generatePassword('RTR-2025-000909', 'CL-CRM01'),
     generatePassword('RTR-2025-000909', 'CL-CRM01', 12, 0),

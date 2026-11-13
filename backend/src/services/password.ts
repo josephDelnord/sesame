@@ -1,24 +1,22 @@
-import { createHash, createHmac } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 
 /**
  * Formule de génération du mot de passe client.
  *
- * Le mot de passe est déterministe et recalculable.
- * - Version 0 : utilise SHA-256 pur (compatibilité avec les anciens mots de passe).
- * - Versions >= 1 : utilise HMAC-SHA256 avec une clé secrète serveur.
- *   Sans cette clé, il est impossible de recréer le mot de passe même avec
- *   les mêmes paramètres (SN, code client, version).
- * Le même couple (SN, code client) + version produit toujours le même mot de passe.
+ * Le mot de passe est déterministe et recalculable via HMAC-SHA256
+ * avec un sel statique (PASSWORD_SECRET_KEY). Sans ce sel, il est
+ * IMPOSSIBLE de recréer le mot de passe même avec les mêmes paramètres.
  */
 
-// 🔐 Clé secrète pour les versions >= 1 (HMAC)
-const HMAC_SECRET = process.env.PASSWORD_SECRET_KEY;
-if (HMAC_SECRET && HMAC_SECRET.length < 32) {
+// 🔐 Sel statique OBLIGATOIRE : doit être défini dans .env (min 32 caractères)
+const secret = process.env.PASSWORD_SECRET_KEY;
+if (!secret || secret.length < 32) {
   throw new Error(
-    'PASSWORD_SECRET_KEY doit faire au moins 32 caractères dans .env. ' +
+    'PASSWORD_SECRET_KEY est OBLIGATOIRE (min 32 caractères) dans .env. ' +
     'Générez-en une avec: openssl rand -hex 64'
   );
 }
+const PASSWORD_SECRET: string = secret;
 
 export const PASSWORD_MIN_LENGTH = 8;
 export const PASSWORD_LENGTH = 12;
@@ -29,23 +27,8 @@ const DIGITS = '23456789';
 const SPECIAL = '!@#$%&*+-_=';
 const MIXED = UPPER + LOWER + DIGITS + SPECIAL;
 
-function sha256(input: string): Buffer {
-  return createHash('sha256').update(input, 'utf8').digest();
-}
-
 function hmacSha256(input: string): Buffer {
-  if (!HMAC_SECRET) {
-    throw new Error(
-      'PASSWORD_SECRET_KEY est requis dans .env pour les versions >= 1 (HMAC). ' +
-      'Générez-en une avec: openssl rand -hex 64'
-    );
-  }
-  return createHmac('sha256', HMAC_SECRET).update(input, 'utf8').digest();
-}
-
-// Sélecteur de fonction de hash selon la version
-function hashForVersion(input: string, version: number): Buffer {
-  return version === 0 ? sha256(input) : hmacSha256(input);
+  return createHmac('sha256', PASSWORD_SECRET).update(input, 'utf8').digest();
 }
 
 /**
@@ -54,10 +37,9 @@ function hashForVersion(input: string, version: number): Buffer {
  * Critères garantis : longueur PASSWORD_LENGTH (>= 8), au moins une majuscule,
  * une minuscule, un chiffre et un caractère spécial.
  *
- * `version` permet la rotation (régénération admin) : la version 0 est la
- * formule d'origine (compatibilité assurée avec les mots de passe existants),
- * chaque version ultérieure produit un mot de passe différent mais tout
- * aussi déterministe et recalculable.
+ * `version` permet la rotation (régénération admin) : chaque version produit
+ * un mot de passe différent mais toujours déterministe et recalculable.
+ * Tous les mots de passe utilisent HMAC-SHA256 avec le sel statique.
  */
 export function generatePassword(
   serialNumber: string,
@@ -67,7 +49,7 @@ export function generatePassword(
 ): string {
   const len = Math.max(PASSWORD_MIN_LENGTH, length);
   const versionSuffix = version > 0 ? `::v${version}` : '';
-  const hash = hashForVersion(`${serialNumber}::${clientCode}${versionSuffix}`, version);
+  const hash = hmacSha256(`${serialNumber}::${clientCode}${versionSuffix}`);
 
   // Quatre positions de classe garantie (au moins 8 caractères demandés).
   const chars: string[] = [
@@ -80,9 +62,9 @@ export function generatePassword(
     chars.push(MIXED[hash[i] % MIXED.length]);
   }
 
-  // Mélange déterministe (Fisher-Yates piloté par un second hash) pour que les
+  // Mélange déterministe (Fisher-Yates piloté par un second HMAC) pour que les
   // classes garanties ne soient pas toujours aux quatre premières positions.
-  const order = hashForVersion(`order:${serialNumber}::${clientCode}${versionSuffix}`, version);
+  const order = hmacSha256(`order:${serialNumber}::${clientCode}${versionSuffix}`);
   for (let i = chars.length - 1; i > 0; i--) {
     const j = order[i % order.length] % (i + 1);
     [chars[i], chars[j]] = [chars[j], chars[i]];
