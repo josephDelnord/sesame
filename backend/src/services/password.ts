@@ -1,12 +1,24 @@
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 
 /**
  * Formule de génération du mot de passe client.
  *
- * Le mot de passe est déterministe et recalculable : il dérive uniquement du
- * numéro de série (SN) du routeur et du code client via un hash SHA-256.
- * Le même couple (SN, code client) produit toujours le même mot de passe.
+ * Le mot de passe est déterministe et recalculable.
+ * - Version 0 : utilise SHA-256 pur (compatibilité avec les anciens mots de passe).
+ * - Versions >= 1 : utilise HMAC-SHA256 avec une clé secrète serveur.
+ *   Sans cette clé, il est impossible de recréer le mot de passe même avec
+ *   les mêmes paramètres (SN, code client, version).
+ * Le même couple (SN, code client) + version produit toujours le même mot de passe.
  */
+
+// 🔐 Clé secrète pour les versions >= 1 (HMAC)
+const HMAC_SECRET = process.env.PASSWORD_SECRET_KEY;
+if (HMAC_SECRET && HMAC_SECRET.length < 32) {
+  throw new Error(
+    'PASSWORD_SECRET_KEY doit faire au moins 32 caractères dans .env. ' +
+    'Générez-en une avec: openssl rand -hex 64'
+  );
+}
 
 export const PASSWORD_MIN_LENGTH = 8;
 export const PASSWORD_LENGTH = 12;
@@ -19,6 +31,21 @@ const MIXED = UPPER + LOWER + DIGITS + SPECIAL;
 
 function sha256(input: string): Buffer {
   return createHash('sha256').update(input, 'utf8').digest();
+}
+
+function hmacSha256(input: string): Buffer {
+  if (!HMAC_SECRET) {
+    throw new Error(
+      'PASSWORD_SECRET_KEY est requis dans .env pour les versions >= 1 (HMAC). ' +
+      'Générez-en une avec: openssl rand -hex 64'
+    );
+  }
+  return createHmac('sha256', HMAC_SECRET).update(input, 'utf8').digest();
+}
+
+// Sélecteur de fonction de hash selon la version
+function hashForVersion(input: string, version: number): Buffer {
+  return version === 0 ? sha256(input) : hmacSha256(input);
 }
 
 /**
@@ -40,7 +67,7 @@ export function generatePassword(
 ): string {
   const len = Math.max(PASSWORD_MIN_LENGTH, length);
   const versionSuffix = version > 0 ? `::v${version}` : '';
-  const hash = sha256(`${serialNumber}::${clientCode}${versionSuffix}`);
+  const hash = hashForVersion(`${serialNumber}::${clientCode}${versionSuffix}`, version);
 
   // Quatre positions de classe garantie (au moins 8 caractères demandés).
   const chars: string[] = [
@@ -55,7 +82,7 @@ export function generatePassword(
 
   // Mélange déterministe (Fisher-Yates piloté par un second hash) pour que les
   // classes garanties ne soient pas toujours aux quatre premières positions.
-  const order = sha256(`order:${serialNumber}::${clientCode}${versionSuffix}`);
+  const order = hashForVersion(`order:${serialNumber}::${clientCode}${versionSuffix}`, version);
   for (let i = chars.length - 1; i > 0; i--) {
     const j = order[i % order.length] % (i + 1);
     [chars[i], chars[j]] = [chars[j], chars[i]];

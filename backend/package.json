@@ -9,7 +9,7 @@
     "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
     "build": "tsc",
     "start": "node --env-file-if-exists=.env dist/index.js",
-    "test": "tsx --test src/tests/password.test.ts src/tests/crm.test.ts"
+    "test": "tsx --env-file=.env --test src/tests/password.test.ts src/tests/crm.test.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",
