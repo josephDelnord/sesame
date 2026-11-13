@@ -15,6 +15,14 @@ import { createHmac } from 'node:crypto';
 // 🔐 Sel statique - sera initialisé par initPasswords() au démarrage
 let PASSWORD_SECRET: string | null = null;
 
+// 🎯 Fonction pour setter le secret manuellement (pour les tests)
+export function setPasswordSecret(secret: string): void {
+  if (secret.length < 32) {
+    throw new Error('PASSWORD_SECRET_KEY doit faire au moins 32 caractères');
+  }
+  PASSWORD_SECRET = secret;
+}
+
 export const PASSWORD_MIN_LENGTH = 8;
 export const PASSWORD_LENGTH = 12;
 

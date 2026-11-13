@@ -1,17 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { initPasswords, generatePassword, meetsCriteria, PASSWORD_MIN_LENGTH } from '../services/password.js';
+import { setPasswordSecret, generatePassword, meetsCriteria, PASSWORD_MIN_LENGTH } from '../services/password.js';
 
-// Initialiser le module password avant tous les tests
-// Utilise le .env pour récupérer PASSWORD_SECRET_KEY
-let passwordInitialized = false;
-test.before(async () => {
-  await initPasswords();
-  passwordInitialized = true;
+// Pour les tests, on utilise un secret fixe via setPasswordSecret
+// au lieu de dépendre de Vault ou .env
+test.before(() => {
+  // Secret de test fixe pour garantir la reproductibilité
+  setPasswordSecret('2f7e4c8a0b1d3e5c9b2a4d6e8f0c1a3b5d7e9f2c4a6b8d0e1f3c5a7b9d2e4f6');
 });
 
 test('le mot de passe est déterministe (recalculable)', () => {
-  if (!passwordInitialized) assert.fail('Password module not initialized');
   assert.equal(
     generatePassword('RTR-2024-000117', 'CL-7F3A'),
     generatePassword('RTR-2024-000117', 'CL-7F3A'),

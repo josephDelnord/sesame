@@ -39,58 +39,55 @@ function getVaultClient(): VaultClient | null {
 }
 
 /**
- * Récupère le PASSWORD_SECRET_KEY depuis Vault ou .env.
+ * Récupère le PASSWORD_SECRET_KEY depuis Vault.
+ * Vault est OBLIGATOIRE. Il n'y a plus de fallback sur .env.
  * 
- * Essaye d'abord Vault (chemin: secret/data/sesame), puis tombe
- * en fallback sur la variable d'environnement.
- * 
- * @throws Error si le secret est introuvable dans les deux sources
+ * @throws Error si Vault n'est pas configuré ou si le secret est introuvable
  */
 export async function getPasswordSecretKey(): Promise<string> {
   const vault = getVaultClient();
 
-  // Si Vault est configuré, essayer de récupérer depuis Vault
-  if (vault) {
-    try {
-      // KV v2 : chemin = secret/data/sesame
-      const result = await vault.read('secret/data/sesame');
-      
-      // Structure KV v2 : { data: { data: { password_secret_key: "..." } } }
-      const v2Data = result?.data as { data?: Record<string, unknown> } | undefined;
-      if (v2Data?.data && typeof v2Data.data.password_secret_key === 'string') {
-        const secret = v2Data.data.password_secret_key as string;
-        if (secret.length >= 32) {
-          return secret;
-        }
-      }
-      
-      // KV v1 fallback : chemin = secret/sesame
-      const v1Result = await vault.read('secret/sesame');
-      const v1Data = v1Result?.data as Record<string, unknown> | undefined;
-      if (v1Data && typeof v1Data.password_secret_key === 'string') {
-        const secret = v1Data.password_secret_key as string;
-        if (secret.length >= 32) {
-          return secret;
-        }
-      }
-      
-      console.warn('Vault configuré mais PASSWORD_SECRET_KEY introuvable dans secret/data/sesame ou secret/sesame');
-    } catch (error) {
-      console.warn('Impossible de se connecter à Vault:', (error as Error).message);
-    }
-  }
-
-  // Fallback sur .env pour le développement
-  const secret = process.env.PASSWORD_SECRET_KEY;
-  if (!secret || secret.length < 32) {
+  if (!vault) {
     throw new Error(
-      'PASSWORD_SECRET_KEY introuvable. ' +
-      'Soit configurez Vault (VAULT_ADDR + VAULT_TOKEN + secret dans secret/data/sesame), ' +
-      'soit définissez PASSWORD_SECRET_KEY dans .env (min 32 caractères). ' +
-      'Générez-en une avec: openssl rand -hex 64'
+      'Vault est OBLIGATOIRE. Configurez VAULT_ADDR et VAULT_TOKEN dans .env ' +
+      'pour utiliser Vault (ex: VAULT_ADDR=http://vault:8200 VAULT_TOKEN=root).'
     );
   }
-  return secret;
+
+  try {
+    // KV v2 : chemin = secret/data/sesame
+    const result = await vault.read('secret/data/sesame');
+    
+    // Structure KV v2 : { data: { data: { password_secret_key: "..." } } }
+    const v2Data = result?.data as { data?: Record<string, unknown> } | undefined;
+    if (v2Data?.data && typeof v2Data.data.password_secret_key === 'string') {
+      const secret = v2Data.data.password_secret_key as string;
+      if (secret.length >= 32) {
+        return secret;
+      }
+      throw new Error('PASSWORD_SECRET_KEY dans Vault est trop court (min 32 caractères)');
+    }
+    
+    // KV v1 fallback : chemin = secret/sesame
+    const v1Result = await vault.read('secret/sesame');
+    const v1Data = v1Result?.data as Record<string, unknown> | undefined;
+    if (v1Data && typeof v1Data.password_secret_key === 'string') {
+      const secret = v1Data.password_secret_key as string;
+      if (secret.length >= 32) {
+        return secret;
+      }
+      throw new Error('PASSWORD_SECRET_KEY dans Vault est trop court (min 32 caractères)');
+    }
+    
+    throw new Error(
+      'PASSWORD_SECRET_KEY introuvable dans Vault. ' +
+      'Vérifiez que le secret existe à secret/data/sesame ou secret/sesame.'
+    );
+  } catch (error) {
+    throw new Error(
+      `Impossible de récupérer PASSWORD_SECRET_KEY depuis Vault : ${(error as Error).message}`
+    );
+  }
 }
 
 /**
